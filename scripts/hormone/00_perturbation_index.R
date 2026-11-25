@@ -1,42 +1,18 @@
-# Source: Figure 2 document, extracted text lines 475-1718
-# Standalone script requiring a CK2-complete RDS and an external combined DEG table.
-# See README.md and docs/KNOWN_LIMITATIONS.md before running.
-
-# CK2-complete input variant: retain the four-component PI workflow and use the all-cell RDS with CK2 restored.
-# Compare only Heat/Cold/PEG versus CK, retaining all annotated cell types; no TF or Endodermis-stage analysis here.
-# Keep the external DEG file unchanged; changing the expression RDS does not recompute those DEGs.
-# Do not overwrite the input RDS; reruns update results with the same PI_UserDEG_ prefix.
-# Validate caches using input paths, file metadata, configuration and function signatures.
-# Sourcing this script runs main once; do not call main again afterwards.
-# R Console：source(file.path(Sys.getenv("SOYBEAN_PROJECT_ROOT", unset = "data"), "Soybean_UserDEG_PI_Figure4_v3_CK2.R"), encoding="UTF-8")
-# Terminal：Rscript /data01/liuxy/Project/Soybean_UserDEG_PI_Figure4_v3_CK2.R
-
-# The DEG component uses the specified filtered DEG table; other components are Augur, scDist and Mixscape.
-# Retain the configured OUT_DIR; do not run DESeq2 or substitute Endodermis state contrasts for stress contrasts.
-# The cited paper's 13 components differ from these four cell-type components; do not duplicate DEG counts to mimic four resolutions.
-# New outputs use PI_UserDEG_ in the configured directory; existing PI caches are not overwritten.
-# Usage from the repository root: source("scripts/figure2/02_perturbation_index.R", encoding = "UTF-8")
-# =============================================================================
-# 1. Configuration.
 MERGED_RDS <- "/data01/liuxy/Project/CK2_added_v3_Results/seurat_obj_with_CK2_v3.rds"
-ANALYSIS_MODE <- "annotated" # This variant uses existing cell types and four components; do not replicate a DEG count to fabricate 13 components.
-# Keep the configured output directory independent of the new MERGED_RDS location.
+ANALYSIS_MODE <- "annotated" 
+
 OUT_DIR <- "/data01/liuxy/Project/激素扰动评分"
-# Check sufficient cells in both replicates of each group, including zero-cell combinations in QC tables.
-# Use content-signature caches when computation functions change; the output directory need not change.
+
 RESUME <- TRUE
 CELLTYPE_COL <- NULL
 CONDITION_COL <- "treatment"
 SAMPLE_COL <- "sample_id"
 EXPECTED_REPLICATES <- NULL
-PAIR_COL <- NULL              # Specify only for a genuine paired design; paired observations share this ID across treatments.
-COVARIATE_COLS <- character() # Optional sample-level covariates, such as c("batch"); the design must remain full rank.
-MIX_NEIGHBOR_BLOCK_COL <- NULL # Optional shared batch/paired blocks; each block must include CK.
-CELLTYPE_KEEP <- NULL         # Retain all annotated cell types by default.
-# Unify lateral-root label variants as Procambium.
-# Normalize with canon() and match prefixes, including "Lateral root" and "Lateral_root".
-# Also covers variants such as "Lateral root cells" and "Lateral roots".
-# Apply the same mapping to expression metadata and the DEG table's Celltype column.
+PAIR_COL <- NULL              
+COVARIATE_COLS <- character() 
+MIX_NEIGHBOR_BLOCK_COL <- NULL 
+CELLTYPE_KEEP <- NULL         
+
 CELLTYPE_RENAME_MAP <- list(
   Procambium = c("Lateral root","Lateral Root","lateral root","Lateral_root","lateral_root",
                  "Lateral root cells","Lateral roots","lateral roots")
@@ -48,16 +24,16 @@ CONDITION_MAP <- list(
  IAA=c("IAA","Indole_3_acetic_acid","IndoleAceticAcid","Auxin"),
  MEJA=c("MEJA","MeJA","Methyl_jasmonate","MethylJasmonate","MJ"),
  SA=c("SA","Salicylic_acid","SalicylicAcid"))
-RESOLUTIONS <- c(0.1,0.2,0.4,0.8) # Retain the source resolution without forcing the number of clusters reported for rice.
+RESOLUTIONS <- c(0.1,0.2,0.4,0.8) 
 ASSAY <- "RNA"
 N_HVG <- 3000L
 N_PCS <- 30L
-GRAPH_REDUCTION <- NULL       # NULL computes RNA PCA; otherwise specify an existing reduction, such as harmony.
-UMAP_REDUCTION <- "umap"      # Prefer the original embedding; compute UMAP only if unavailable.
+GRAPH_REDUCTION <- NULL       
+UMAP_REDUCTION <- "umap"      
 SEED <- 20261021L
-N_THREADS <- 4L               # Used by Augur; reduce to 2L if memory is limited.
+N_THREADS <- 4L               
 MIN_CELLS_PER_SAMPLE_CLUSTER <- 20L
-MIN_REPLICATES_PER_CONDITION <- 2L # At least two replicates; three or more are preferable.
+MIN_REPLICATES_PER_CONDITION <- 2L 
 MIN_PB_LIBRARY <- 1000
 AUGUR_N_SUBSAMPLES <- 50L
 AUGUR_SUBSAMPLE_SIZE <- 20L
@@ -69,20 +45,14 @@ MIX_NDIMS <- 20L
 MIX_MIN_DE_GENES <- 5L
 MIX_LOGFC_THRESHOLD <- 0.25
 MIX_ITERATIONS <- 10L
-DENSE_MEMORY_BUDGET_GB <- 32 # Estimated budget for major dense matrices, not automatic detection of available RAM.
-SAVE_SEURAT_WITH_PI <- FALSE # TRUE also saves the reconstructed minimal object without overwriting the input RDS.
+DENSE_MEMORY_BUDGET_GB <- 32 
+SAVE_SEURAT_WITH_PI <- FALSE 
 PIPELINE_VERSION <- "ensemble_pi_adapted_1.5_augur_future_fix"
 
-# Retain legacy settings for cache validation; the new main does not run DESeq2 or access DESeq2_tables.
-# Augur uses cell-level cross-validation by default, not leave-one-biological-sample-out validation; PI is neither significance nor damage probability.
-
-# 2. Utilities and validation.
 csv <- function(x,p) utils::write.csv(x,p,row.names=FALSE,na="",fileEncoding="UTF-8")
 bind <- function(x) if(length(x)) do.call(rbind,x) else data.frame()
 canon <- function(x) gsub("[[:space:]_.-]","",tolower(trimws(as.character(x))))
-# Unify lateral-root-related cell-type labels as Procambium.
-# Normalize with canon() before prefix matching to cover variants such as "Lateral root cells".
-# Edit CELLTYPE_RENAME_MAP to change mappings; the function itself need not change.
+
 apply_celltype_rename <- function(x, map=CELLTYPE_RENAME_MAP) {
   if(!length(map)) return(x)
   x_chr <- as.character(x)
@@ -127,7 +97,7 @@ same_partition <- function(a,b) {
   identical(match(a,unique(a)),match(b,unique(b)))
 }
 resolve_sample_column <- function(md,condition,explicit=NULL) {
-  # Restrict md to analyzed cells so salt-treatment or unannotated cells do not affect sample-column selection.
+  
   if(!nrow(md)) stop("No cells remain after treatment/cell-type filtering; cannot validate samples.")
   candidates<-c("sample_id","sampleID","biological_sample","sample","sample_name")
   hits<-unique(unlist(lapply(candidates,function(k)names(md)[canon(names(md))==canon(k)])))
@@ -135,7 +105,7 @@ resolve_sample_column <- function(md,condition,explicit=NULL) {
     if(length(explicit)!=1L || !explicit %in% names(md)) stop("Configured SAMPLE_COL does not exist: ",explicit)
     hits<-unique(c(explicit,hits))
   }
-  # Use orig.ident only when no standard sample column exists; never silently override a conflicting sample column.
+  
   if(!length(hits) && "orig.ident" %in% names(md)) hits<-"orig.ident"
   if(!length(hits)) stop("No candidate sample columns; inspect 00_metadata_inventory.csv.")
   cond<-as.character(condition);groups<-c("CK","ABA","eBL","IAA","MEJA","SA")
@@ -194,7 +164,7 @@ get_metadata <- function(obj) {
   au<-as.data.frame(table(as.character(old[[co]]),useNA="ifany"),stringsAsFactors=FALSE)
   names(au)<-c("original_condition","n_cells");au$mapped_condition<-map_condition(au$original_condition)
   csv(au,file.path(OUT_DIR,"00_condition_mapping.csv"))
-  # Rename lateral-root variants as Procambium before scope filtering so all subsequent counts use the same label.
+  
   types<-apply_celltype_rename(trimws(as.character(old[[ct]])))
   scope<-!is.na(mapped)&!is.na(types)&nzchar(types)&
     !tolower(types) %in% c("undefined","unknown","unassigned","unclassified","na")
@@ -219,7 +189,7 @@ get_metadata <- function(obj) {
   if(anyNA(z)||any(!nzchar(z$pi_sample))) stop("Retained cells have missing metadata; complete the relevant columns first.")
   if(!all(c("CK","ABA","eBL","IAA","MEJA","SA") %in% z$pi_condition)) stop("CK, Heat, Cold and PEG must be identified; check the mapping table.")
   cols<-c("pi_sample","pi_condition",if(!is.null(PAIR_COL))"pi_pair",paste0("pi_cov",seq_along(COVARIATE_COLS)))
-  # Handle paste0 with zero-length inputs explicitly.
+  
   cols<-intersect(cols,names(z)); sm<-unique(z[,cols,drop=FALSE])
   csv(sm,file.path(OUT_DIR,"00_sample_mapping.csv"))
   if(anyDuplicated(sm$pi_sample)) stop("A sample ID maps to multiple treatment/covariate/pair values; correct the sample information.")
@@ -272,7 +242,7 @@ analysis_groups <- function() {
   data.frame(grouping=rk,column=paste0("pi_",rk),resolution=RESOLUTIONS)
 }
 memory_check <- function(ng,nc,multiplier=3) {
-  # Convert dimensions to double before multiplication to avoid integer overflow above 2^31 - 1.
+  
   dims<-as.double(c(ng,nc,multiplier))
   if(length(dims)!=3L || any(!is.finite(dims)) || any(dims<0))stop("Invalid dimensions for memory estimation.")
   gb<-prod(dims)*8/1024^3
@@ -285,12 +255,12 @@ get_expression <- function(obj,assay="RNA",layer="data") {
     SeuratObject::GetAssayData(obj,assay=assay,layer=layer)
   else SeuratObject::GetAssayData(obj,assay=assay,slot=layer)
 }
-# 3. Preprocessing and shared clustering.
+
 prepare <- function() {
   original<-readRDS(MERGED_RDS)
   if(!inherits(original,"Seurat")) stop("RDS does not contain a Seurat object.")
   md<-get_metadata(original);counts<-raw_counts(original,md$cell)
-  # Reconstruct a minimal RNA object to avoid using unidentified integrated/data layers as expression input.
+  
   obj<-SeuratObject::CreateSeuratObject(counts=counts,meta.data=md,assay="RNA")
   obj<-Seurat::NormalizeData(obj,normalization.method="LogNormalize",scale.factor=10000,verbose=FALSE)
   obj<-Seurat::FindVariableFeatures(obj,selection.method="vst",nfeatures=N_HVG,verbose=FALSE)
@@ -358,7 +328,7 @@ sample_design <- function(m,st) {
   m$pi_condition<-factor(as.character(m$pi_condition),levels=c("CK",st))
   if(!is.null(PAIR_COL)) m$pi_pair<-factor(m$pi_pair)
   cov<-if(length(COVARIATE_COLS))paste0("pi_cov",seq_along(COVARIATE_COLS)) else character()
-  # Omit covariates constant within a comparison; report covariates collinear with treatment.
+  
   cov<-cov[vapply(cov,function(k)length(unique(m[[k]]))>1,logical(1))]
   for(k in cov) if(is.character(m[[k]])||is.factor(m[[k]])) m[[k]]<-factor(m[[k]])
   form<-stats::reformulate(c(if(!is.null(PAIR_COL))"pi_pair",cov,"pi_condition"))
@@ -376,16 +346,13 @@ run_augur <- function(norm,md,col,st) {
   message(sprintf("Augur %s: cells=%d, genes=%d, celltypes=%d, n_subsamples=%d, subsample_size=%d, folds=%d, threads=%d",
                   st, ncol(x), nrow(x), length(eligible),
                   AUGUR_N_SUBSAMPLES, AUGUR_SUBSAMPLE_SIZE, AUGUR_FOLDS, N_THREADS))
-  # Augur::calculate_auc uses future. Under RStudio or RStudio Server,
-  # a global multiprocess plan may use multicore on Linux, where forked workers can be unstable.
-  # A worker crash may produce only "Execution halted" in the main R process.
-  # Use multisession for this computation and restore the previous plan afterwards.
+  
   if(!requireNamespace("future",quietly=TRUE)) stop("Augur requires future; install it first.")
   old_plan<-future::plan()
   on.exit(future::plan(old_plan),add=TRUE)
   if(N_THREADS>1L) future::plan(future::multisession,workers=N_THREADS)
   else future::plan(future::sequential)
-  # Adapt arguments to the installed Augur version; older versions lack n_threads.
+  
   auc_args<-names(formals(Augur::calculate_auc))
   call_args<-list(input=x,meta=m,cell_type_col=col,label_col="pi_condition",
                   n_subsamples=AUGUR_N_SUBSAMPLES,subsample_size=AUGUR_SUBSAMPLE_SIZE,
@@ -401,7 +368,7 @@ run_augur <- function(norm,md,col,st) {
     }
   )
   if(!all(c("cell_type","auc") %in% names(out$AUC))) stop("Unexpected Augur output structure; check the installed version.")
-  # Do not duplicate the original matrix in checkpoints.
+  
   out$X<-NULL;out$feature_importance<-NULL
   rm(x);invisible(gc())
   list(value=data.frame(cluster=as.character(out$AUC$cell_type),value=as.numeric(out$AUC$auc)),raw=out)
@@ -432,7 +399,7 @@ run_scdist <- function(norm,md,col,cluster,st) {
   x<-norm[,rownames(m),drop=FALSE];x<-x[Matrix::rowSums(x)>0,,drop=FALSE]
   if(min(dim(x))<=SCDIST_D) stop("Insufficient scDist dimensions; d will not be changed automatically.")
   memory_check(nrow(x),ncol(x))
-  # Call scDist separately for each group to avoid densifying the entire single-cell matrix at once.
+  
   m$pi_sccluster<-"cluster"
   out<-scDist::scDist(normalized_counts=as.matrix(x),meta.data=m,fixed.effects=fx,
                       random.effects=re,clusters="pi_sccluster",d=SCDIST_D,min.count.per.cell=SCDIST_MIN_CELLS)
@@ -442,7 +409,6 @@ run_scdist <- function(norm,md,col,cluster,st) {
   list(value=as.numeric(rr[["Dist."]][1]),results=rr,n_CK=nr[1],n_stress=nr[2])
 }
 
-# Build the full group-by-real-sample grid; zero-cell entries are for QC, not fabricated zero-expression samples.
 group_qc <- function(pb,md,col,grouping) {
   samples<-unique(md[,c("pi_sample","pi_condition"),drop=FALSE])
   samples$pi_sample<-as.character(samples$pi_sample);samples$pi_condition<-as.character(samples$pi_condition)
@@ -498,10 +464,6 @@ skipped_job <- function(key,reason) {
   list(ok=FALSE,value=NULL,error=reason,warnings=character(),key=key,status="skipped_QC")
 }
 
-# 4. Single-cell Mixscape.
-# When filling missing genes, Seurat retrieves a stored Neighbor from Tools using the Command name.
-# Some versions use inconsistent names, leading to Indices(NULL) errors.
-# Add aliases only to the current CalcPerturbSig object after checking barcodes and indices; do not alter neighbors.
 select_mixscape_neighbors <- function(tool_list,command,rep_cells,rep_controls,k,indices_fun) {
   expected<-make.names(paste0("PRTB_",names(rep_cells)))
   if(anyDuplicated(expected))stop("Mixscape block names collide after normalization.")
@@ -524,7 +486,7 @@ select_mixscape_neighbors <- function(tool_list,command,rep_cells,rep_controls,k
   list(bundle=tool_list[[source]],source=source,command=command,aliased=!identical(source,command))
 }
 rebuild_mixscape_neighbors <- function(embedding,rep_cells,rep_controls,ndims,k,nn_helper) {
-  # If the cache is absent, reconstruct using the same PCA, CK pool, RANN and k as CalcPerturbSig's NNHelper call.
+  
   if(ncol(embedding)<ndims)stop("Insufficient PCA dimensions to reconstruct Mixscape neighbors.")
   names_out<-make.names(paste0("PRTB_",names(rep_cells)))
   if(anyDuplicated(names_out))stop("Mixscape block names collide after normalization.")
@@ -565,7 +527,7 @@ repair_mixscape_neighbors <- function(sub,st,block) {
     selected<-select_mixscape_neighbors(setNames(list(bundle),candidates),candidates,rep_cells,rep_controls,MIX_NEIGHBORS,SeuratObject::Indices)
     rebuilt<-TRUE
   }
-  # Tool<- derives its name from the calling function; assign an explicit alias in the current tools slot instead.
+  
   sub@tools[[selected$command]]<-selected$bundle
   csv(data.frame(condition=st,source_tool=selected$source,lookup_command=selected$command,
                  action=if(rebuilt)"rebuilt_same_PCA_CK_RANN" else if(selected$aliased)"added_validated_alias" else "already_aligned",
@@ -587,17 +549,15 @@ run_mixscape <- function(obj,st) {
   if(ncol(SeuratObject::Embeddings(sub[["pca"]]))<MIX_NDIMS) stop("Insufficient Mixscape PCA dimensions.")
   hv<-intersect(SeuratObject::VariableFeatures(sub),rownames(sub[["RNA"]]))
   if(!length(hv))stop("Mixscape lacks RNA variable genes; cannot automatically use all genes.")
-  # Initial PRTB is computed only for hv; using all-gene dimensions would overestimate memory and risk overflow.
-  # This estimates the initial matrix, not peak memory for additional genes or all Seurat intermediates.
+  
   memory_check(length(hv),ncol(sub),multiplier=4)
   sub<-Seurat::CalcPerturbSig(sub,assay="RNA",features=hv,slot="data",
                               gd.class="pi_condition",nt.cell.class="CK",reduction="pca",ndims=MIX_NDIMS,
                               num.neighbors=MIX_NEIGHBORS,split.by=block,new.assay.name="PRTB",verbose=TRUE)
   sub<-repair_mixscape_neighbors(sub,st,block)
-  # Run Mixscape once per stress-versus-CK comparison, not once per clustering resolution.
-  # RunMixscape fills and scales the required PRTB genes internally; do not LogNormalize negative PRTB values.
+  
   prior_tools<-mixscape_tool_names(sub@tools)
-  if(length(prior_tools))sub@tools[prior_tools]<-NULL # Remove only previous results within the current subset to avoid retrieving historical pvec values.
+  if(length(prior_tools))sub@tools[prior_tools]<-NULL 
   RunMixscape<-Seurat::RunMixscape
   sub<-RunMixscape(sub,assay="PRTB",slot="scale.data",labels="pi_condition",
                    nt.class.name="CK",new.class.name="pi_mixscape",min.de.genes=MIX_MIN_DE_GENES,
@@ -605,7 +565,7 @@ run_mixscape <- function(obj,st) {
                    iter.num=MIX_ITERATIONS,split.by=NULL,verbose=TRUE)
   sm<-sub[[]];cells<-colnames(sub)
   tools_found<-sub@tools[mixscape_tool_names(sub@tools)]
-  # Save the lightweight raw output before extraction so pvec survives an extraction error.
+  
   snapshot<-list(condition=st,cells=cells,metadata=sm[cells,"pi_condition",drop=FALSE],
                  tools=tools_found,all_tool_names=names(sub@tools),compute_signature=COMPUTE_SIGNATURE,
                  classification=sm[,grep("^pi_mixscape",names(sm)),drop=FALSE])
@@ -620,19 +580,17 @@ run_mixscape <- function(obj,st) {
        classification=sm[,grep("^pi_mixscape",names(sm)),drop=FALSE])
 }
 
-
-# User DEG inputs and plotting configuration.
 PAPER_DIR <- file.path(Sys.getenv("SOYBEAN_PROJECT_ROOT", unset = "data"), "muscat_results_ck_ref_paper")
-# Use the explicitly configured input; do not substitute another DEG table or old DESeq2 results if absent.
+
 DEG_FILE <- file.path(PAPER_DIR,'All_DEG_filtered_paper_thresholds.csv')
-# To use combined.csv instead, change the single input path; do not add the two tables together.
+
 DEG_COLUMNS <- list(gene=NULL,celltype=NULL,contrast=NULL,condition=NULL,state=NULL)
-DEG_CONDITION_IS_VS_CK <- FALSE # Set TRUE only if Heat/Cold/PEG labels in the table explicitly represent contrasts against CK.
-DEG_CELLTYPE_MAP <- character() # Optional mapping c('DEG_label' = 'Seurat_cell_type'), applied after the standard cell-type renaming.
-ZERO_DEG_COMPARISONS <- NULL    # Optional data.frame(Celltype, Condition) of verified zero-DEG comparisons; unknown comparisons are not zero-filled.
+DEG_CONDITION_IS_VS_CK <- FALSE 
+DEG_CELLTYPE_MAP <- character() 
+ZERO_DEG_COMPARISONS <- NULL    
 EXPORT_TIFF <- FALSE
 PLOT_POINT_SIZE <- 0.13
-VIOLIN_POINT_MAX_PER_GROUP <- 500L # Limit only overlaid points; violin densities and statistics use all cells with complete PI values.
+VIOLIN_POINT_MAX_PER_GROUP <- 500L 
 OUTPUT_PREFIX <- 'PI_UserDEG_'
 STRESSES <- c("ABA","eBL","IAA","MEJA","SA")
 PI_COMPONENTS <- c('UserDEG_count','Augur_annotation','scDist_annotation','Mixscape')
@@ -683,7 +641,7 @@ deg_column <- function(d,role,aliases,required=FALSE,multiple=FALSE) {
   hit[1]
 }
 parse_ck_pair <- function(v) {
-  # Accept explicit stress-versus-CK contrasts; reversed contrasts may be counted because PI does not use logFC direction.
+  
   x<-canon(v);out<-rep(NA_character_,length(v))
   for(st in STRESSES)for(a in CONDITION_MAP[[st]])for(b in CONDITION_MAP$CK) {
     labels<-c(paste(a,'vs',b),paste(b,'vs',a),paste(a,'versus',b),paste(b,'versus',a),
@@ -700,8 +658,7 @@ standardize_user_deg <- function(raw) {
   tc<-deg_column(raw,'condition',c('Condition','treatment','stress','group'))
   sc<-deg_column(raw,'state',c('State','state','substate'))
   n<-nrow(raw)
-  # Apply the same lateral-root-to-Procambium renaming to the DEG Celltype column,
-  # so DEG counts align with expression-object cell types.
+  
   d<-data.frame(Gene=trimws(as.character(raw[[gc]])),
                 Celltype=apply_celltype_rename(trimws(as.character(raw[[cc]]))),
                 Condition=NA_character_,State=if(is.null(sc))NA_character_ else trimws(as.character(raw[[sc]])),
@@ -711,7 +668,7 @@ standardize_user_deg <- function(raw) {
     labs<-if(length(xc))trimws(as.character(unlist(raw[i,xc,drop=FALSE]))) else character()
     labs<-labs[!is.na(labs) & nzchar(labs)]
     pars<-parse_ck_pair(labs)
-    # Do not let another column silently override explicit stage-level or treatment-versus-treatment contrasts.
+    
     unknown_pair<-is.na(pars) & grepl('vs|versus|minus|/| - ',labs,ignore.case=TRUE)
     valid<-unique(pars[!is.na(pars)])
     if(length(valid)>1L || any(unknown_pair)) {d$Status[i]<-'Conflicting_or_nonCK_comparison';next}
@@ -726,14 +683,14 @@ standardize_user_deg <- function(raw) {
 }
 load_user_deg <- function() {
   if(!file.exists(DEG_FILE))stop("Specified DEG file missing: ",DEG_FILE,"; the input will not be replaced automatically.")
-  # Even with a validated standardized cache, read the original table's row count and columns rather than inferring them from its filename.
+  
   raw<-read_csv_pi(DEG_FILE)
   pi_csv(data.frame(Column=names(raw)),'DEG_input_columns')
   md5<-unname(tools::md5sum(DEG_FILE));reader<-'Direct_user_DEG'
   saved<-file.path(OUT_DIR,'Nature_DE_filtered_annotated.csv')
   prov<-file.path(OUT_DIR,'Nature_DE_input_status.csv')
   d<-NULL
-  # Parse explicitly configured columns directly so an existing standardized cache cannot mask new settings.
+  
   use_saved<-all(vapply(DEG_COLUMNS,is.null,logical(1))) && !DEG_CONDITION_IS_VS_CK
   if(use_saved && file.exists(saved) && file.exists(prov)) {
     audit<-read_csv_pi(prov)
@@ -748,7 +705,7 @@ load_user_deg <- function() {
           unique_rows(q,'Source_row',"Nature-standardized DEG table")
           if(!setequal(q$Source_row,seq_len(nrow(raw))))stop("Standardized DEG source row numbers are incomplete.")
           d<-q[c('Gene','Celltype','State','Condition','Source_row')]
-          # Reapply the same renaming to legacy cached labels such as Lateral root.
+          
           d$Celltype<-apply_celltype_rename(d$Celltype)
           conflict<-as.character(q$Contrast_conflict)
           if(anyNA(conflict)||any(!conflict %in% c('TRUE','FALSE')))stop("Invalid standardized DEG conflict field.")
@@ -761,7 +718,7 @@ load_user_deg <- function() {
     }
   }
   if(is.null(d))d<-standardize_user_deg(raw)
-  # Do not mix stage-level and whole-cell-type DEGs or infer stage-to-cell-type mappings from names.
+  
   state<-!is.na(d$State) & nzchar(trimws(d$State))
   d$Status[state]<-'State_level_comparison_excluded'
   d$Condition[state]<-NA_character_
@@ -778,7 +735,7 @@ load_user_deg <- function() {
   list(data=d,md5=md5)
 }
 count_user_degs <- function(deg,celltypes) {
-  # Deduplicate exact gene IDs without removing soybean version suffixes or mixing transcript and gene identifiers.
+  
   usable<-deg[deg$Condition %in% STRESSES & !is.na(deg$Celltype) & nzchar(deg$Celltype),,drop=FALSE]
   bad<-setdiff(unique(usable$Celltype),celltypes)
   pi_csv(usable[usable$Celltype %in% bad,,drop=FALSE],'DEG_unmatched_celltypes')
@@ -802,7 +759,6 @@ count_user_degs <- function(deg,celltypes) {
   grid
 }
 
-# Auditable caches without changing directories or reusing old DESeq2 counts.
 compute_manifest <- function() {
   keys<-c('MERGED_RDS','ANALYSIS_MODE','EXPECTED_REPLICATES','CELLTYPE_COL','CONDITION_COL','SAMPLE_COL','PAIR_COL',
           'COVARIATE_COLS','MIX_NEIGHBOR_BLOCK_COL','CELLTYPE_KEEP','CELLTYPE_RENAME_MAP','CONDITION_MAP','RESOLUTIONS','ASSAY','N_HVG','N_PCS',
@@ -837,7 +793,7 @@ get_saved_components <- function() {
   if(!setequal(raw$cell,md$cell) || !all(md$cell %in% um$cell))stop("Original cache cell sets do not match.")
   raw<-raw[match(md$cell,raw$cell),c('cell',PI_COMPONENTS[-1]),drop=FALSE]
   if(!all(md$pi_condition %in% STRESSES))stop("Original PI metadata includes non-stress conditions.")
-  # PI values in the legacy 05 table are not used in the new calculation.
+  
   if(any(!is.finite(as.matrix(raw[PI_COMPONENTS[-1]]))))return(NULL)
   message("Reusing manifest-validated per-cell Augur/scDist/Mixscape values; ignoring old DESeq2 counts and PI values.")
   list(cells=md,nondeg=raw,umap=um,source='Validated_existing_component_CSVs')
@@ -884,14 +840,12 @@ compute_other_components <- function() {
        umap=data.frame(cell=rownames(em),UMAP1=em[,1],UMAP2=em[,2]),source='Validated_checkpoints_or_recomputed_nonDEG_methods')
 }
 
-# Combine four components and arrange the Figure 4-style panels.
 combine_user_pi <- function(raw) {
   raw<-as.matrix(raw)
   if(!identical(colnames(raw),PI_COMPONENTS))stop("Incorrect PI component names or order.")
   if(any(raw[,'UserDEG_count']<0,na.rm=TRUE))stop("DEG counts cannot be negative.")
   if(any(raw[,'Augur_annotation']<0 | raw[,'Augur_annotation']>1,na.rm=TRUE))stop("Augur AUC must lie in [0, 1].")
-  # Mixscape pvec contains raw projection scores, not posterior probabilities; values may fall outside [0, 1].
-  # Do not clip raw model components; min-max scale each component using its observed pooled range below.
+  
   scaled<-raw;audits<-list()
   for(j in seq_len(ncol(raw))) {
     x<-raw[,j];ok<-is.finite(x);scaled[,j]<-NA_real_;lo<-hi<-NA_real_;status<-'No_values'
@@ -957,7 +911,7 @@ plot_user_pi <- function(cm,scaled,um,samples) {
                                axis.line=ggplot2::element_blank(),legend.position='bottom')+
     ggplot2::labs(title='b  User-DEG ensemble PI',x=NULL,y=NULL)
   good<-d[is.finite(d$PI),,drop=FALSE]
-  # The fixed random seed controls point subsampling only; violins still use all complete cells.
+  
   set.seed(SEED)
   groups<-split(seq_len(nrow(good)),interaction(good$pi_condition,good$pi_celltype,drop=TRUE))
   dots<-good[unlist(lapply(groups,function(ii)if(length(ii)>VIOLIN_POINT_MAX_PER_GROUP)sample(ii,VIOLIN_POINT_MAX_PER_GROUP) else ii)),,drop=FALSE]
@@ -977,7 +931,7 @@ plot_user_pi <- function(cm,scaled,um,samples) {
   save_pi_plot(b+ggplot2::facet_wrap(~pi_condition,nrow=1),'B_PI_UMAP',210,85)
   ch<-max(90,ceiling(length(ct)/4)*43+25)
   save_pi_plot(cplot,'C_celltype_violin',230,ch)
-  # Combine panels with base grid without adding patchwork/cowplot dependencies.
+  
   ga<-ggplot2::ggplotGrob(a);gb<-ggplot2::ggplotGrob(b+ggplot2::facet_wrap(~pi_condition,ncol=1));gc<-ggplot2::ggplotGrob(cplot)
   draw<-function() {
     grid::grid.newpage();grid::pushViewport(grid::viewport(layout=grid::grid.layout(2,2,
@@ -996,10 +950,6 @@ plot_user_pi <- function(cm,scaled,um,samples) {
   pi_csv(d,'Figure_source_cells');pi_csv(samples,'Figure_source_samples')
 }
 
-# v3: Mixscape result extraction and auditable resumption.
-# SeuratObject::Tool<- names tools using the call stack; Seurat::RunMixscape may save results
-# under Seurat::RunMixscape or Seurat..RunMixscape rather than RunMixscape.
-# Read only pvec from the current RunMixscape result; do not substitute posterior probabilities or other components.
 mixscape_tool_names <- function(x) {
   n<-names(x)
   n[grepl('(^|[^[:alnum:]])RunMixscape($|[^[:alnum:]])',n)]
@@ -1054,8 +1004,6 @@ select_mixscape_pvec <- function(tool_list,st,cells,condition) {
   list(value=attempts[[chosen]]$value,tool=tool_list[[candidates[chosen]]],source=candidates[chosen],audit=audit)
 }
 
-# Cache migration may ignore these Mixscape-function changes only for non-Mixscape tasks.
-# All other inputs, configuration, package versions and computation functions must still match.
 mixscape_function_names <- function() c('extract_mix_pvec','run_mixscape',
                                         'mixscape_tool_names','select_mixscape_pvec','select_mixscape_neighbors',
                                         'rebuild_mixscape_neighbors','repair_mixscape_neighbors')
@@ -1077,7 +1025,7 @@ initialize_pi_cache <- function(manifest) {
     m<-tryCatch(readRDS(p),error=function(e)NULL)
     if(is.list(m) && !is.null(m$functions))found[[digest_object(m)]]<-m
   }
-  # Preserve the previous manifest before updating the entry file so prior successful caches remain verifiable.
+  
   for(sig in names(found)) {
     dest<-file.path(checkpoint_dir,paste0('UserPI_manifest_',sig,'.rds'))
     if(!file.exists(dest))saveRDS(found[[sig]],dest)
@@ -1161,7 +1109,6 @@ write_pi_component_diagnostics <- function(cm,raw) {
   for(j in seq_len(ncol(raw)))message("Valid component ",colnames(raw)[j],'：',sum(is.finite(raw[,j])),'/',nrow(raw))
   invisible(tab)
 }
-
 
 main <- function() {
   if(ANALYSIS_MODE!='annotated')stop("User cell-type DEGs support only the annotated four-component PI. Without DEGs at four resolutions, the paper's 13-component PI cannot be constructed.")

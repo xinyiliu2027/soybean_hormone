@@ -1,44 +1,27 @@
-# -*- coding: UTF-8 -*-
-# v11组织内PAGA：先读本文末main_v11配置；旧v10函数保留供复用但不执行全根分析。
-# 按用户习惯保存为soybean_v9_run.R运行。每个Python阶段启动均安装幂等补丁。
-# 输出目录、counts导出缓存、UMAP坐标、分析阈值及主/Python日志文件名不变。
-# 修复：先astype('string')再fillna('')；包含Categorical/object/string启动自检。
-# 主日志run_v9.log；Python日志python_reference_v9.log和python_full_v9.log。
-# 保留本次附件中的scipy/UMAP兼容处理，原始UMAP及分析参数不变。
-# R负责Seurat读取、原UMAP保留、样本级统计、GO和论文式分支模型作图；
-# R自动写出并调用文末嵌入的Python引擎，运行真实Scanpy PAGA，而非用相关图冒充PAGA。
-# 运行：Rscript --vanilla soybean_v9_run.R；source 后请调用 main_v11()。
-# 无需source任何旧版R文件。Python环境缺失时，main_v10()会在启动自检里直接列出可用解释器并报错退出。
-# Python依赖：scanpy anndata scipy numpy pandas scikit-learn igraph leidenalg h5py pynndescent。
-# 建环境（无conda的服务器）：micromamba + python 3.11 + scanpy（见对话里的命令）。系统python 3.6/3.8 装不了scanpy。
-# 处理标签自动归一：HighTemp/High-Temp/HT/高温 -> Heat，LowTemp/低温 -> Cold，大小写、空格、连字符都不敏感。
-# R依赖：Seurat/SeuratObject Matrix jsonlite。edgeR/statmod和大豆OrgDb用于后续统计/GO。
-# 原UMAP只用于展示；邻接图由CK训练的RNA-HVG/PCA建立。不会强制生成Y形/两条分支。
-
 INPUT_RDS <- '/data01/liuxy/Project/CK2_added_v3_Results/seurat_obj_with_CK2_v3.rds'
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
-INPUT_CACHE_DIR <- file.path(RUN_DIR,'QC_CK_PAGA_branches_v9') # 复用旧版6.4GB导出
-OUT_DIR <- Sys.getenv('PAGA_OUT_DIR', unset=getwd()) # 输出到启动时当前目录；投递脚本固定为/data01/liuxy/Project
-PYTHON <- '/home/liuxy/micromamba/envs/paga/bin/python' # 已装scanpy环境的绝对路径；若该路径不存在，main_v10()会自动探测PAGA_PYTHON/常见conda路径/Sys.which。
-# 库路径：Rscript 启动时的 .libPaths() 可能和 RStudio 会话不同；包找不到时用它补
+INPUT_CACHE_DIR <- file.path(RUN_DIR,'QC_CK_PAGA_branches_v9') 
+OUT_DIR <- Sys.getenv('PAGA_OUT_DIR', unset=getwd()) 
+PYTHON <- '/home/liuxy/micromamba/envs/paga/bin/python' 
+
 PAGA_LIB <- Sys.getenv('PAGA_LIB')
 if(nzchar(PAGA_LIB)) .libPaths(unique(c(strsplit(PAGA_LIB, .Platform$path.sep)[[1]], .libPaths())))
 ASSAY <- 'RNA'; UMAP_NAME <- 'umap'
 TREATMENT_COL <- 'treatment'; CELLTYPE_COL <- 'cell_type'; SAMPLE_COL <- 'orig.ident'
-BATCH_COL <- '' # 若有明确技术批次，请填；完全与处理混淆时禁止因果归因。
+BATCH_COL <- '' 
 GROUPS <- c('CK','ABA','eBL','IAA','MeJA','SA','Heat','Cold','PEG')
 REQUIRE_ALL_GROUPS <- TRUE
 MIN_REPLICATES <- 2L
 QC_LABELS <- c('QC','Quiescent Center','Quiescent centre')
-ROOT_CELL <- '' # 可填经验证的CK早期细胞barcode；默认QC注释候选根。
+ROOT_CELL <- '' 
 ROOT_BIOLOGICALLY_VALIDATED <- FALSE
 N_HVG <- 2000L; N_PCS <- 30L; N_NEIGHBORS <- 30L
-CK_LEIDEN_RESOLUTION <- 0.5 # 控制CK状态粒度，不预设末端组织/分支数。
+CK_LEIDEN_RESOLUTION <- 0.5 
 PAGA_THRESHOLD <- 0.10
 THRESHOLD_GRID <- c(.05,.10,.20,.30)
 NEIGHBOR_GRID <- c(15L,30L,50L)
 MIN_ARM_STATES <- 2L; MIN_ARM_CELLS <- 100L
-CK_SUBSAMPLES <- 20L # 80%分层无放回采样，检查稳定性；不是20个生物学重复。
+CK_SUBSAMPLES <- 20L 
 EDGE_RESAMPLES <- 5L
 EDGE_MIN_PER_STATE_SAMPLE <- 20L; EDGE_MAX_PER_STATE_SAMPLE <- 200L
 MAP_CONFIDENCE <- 0.6; MAP_RADIUS_MULTIPLIER <- 1.5
@@ -46,7 +29,7 @@ MIN_SAMPLE_BRANCH_CELLS <- 30L
 N_BINS <- 20L; MIN_BIN_SAMPLE_CELLS <- 5L
 GENES_PER_BRANCH <- 30L; DE_FDR <- .05; DE_LOGFC <- .5
 RUN_DE <- TRUE; RUN_GO <- TRUE
-WGCNA_MEMBERSHIP_FILE <- '' # 可选gene_id,module真实表；不再依赖此文件才能画主分支图。
+WGCNA_MEMBERSHIP_FILE <- '' 
 ORGDB_PACKAGE <- 'org.G.max.eg.db'; GO_FDR <- .05
 REBUILD_EXPORT <- FALSE; REBUILD_PAGA <- FALSE
 SEED <- 20261121L; PNG_DPI <- 200L
@@ -901,13 +884,10 @@ plot_treatment_network_v10 <- function(nodes,edges,changes,d){
   },17,15)
 }
 
-
-# v11: tissue-specific CK reference analysis adapted from the supplied paper code.
-# No published cluster numbers or ERS+/ERS- labels are copied onto soybean cells.
 TISSUES_V11 <- c('Endodermis','Cortex','Epidermis','Root Cap','Pericycle','Procambium','Phloem','Xylem')
 LOCAL_K_V11 <- 30L; LOCAL_RESOLUTION_V11 <- .5; LOCAL_EDGE_THRESHOLD_V11 <- .1
 ROOT_OVERRIDES_V11 <- file.path(OUT_DIR,'root_overrides_v11.csv')
-SHOW_HYPOTHESIS_ARROWS <- FALSE # default: undirected PAGA; enable only with an explicit interpretation of local roots
+SHOW_HYPOTHESIS_ARROWS <- FALSE 
 
 local_tag <- function(x)gsub('[^[:alnum:]]','_',x)
 local_read <- function(tissue,name)read.csv(file.path(OUT_DIR,paste0('L11_',local_tag(tissue),'_',name,'.csv')),stringsAsFactors=FALSE)

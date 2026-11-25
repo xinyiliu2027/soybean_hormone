@@ -1,19 +1,11 @@
-# 完整独立续跑v2：拆分内皮层胁迫/激素图，新增全部细胞类型图。
-# 已有内皮层结果直接读取；全细胞图使用相同regulon、RDS和已保存P1/P2/P3。
-# 不重跑GENIE3，不重新聚类，不重新拟时序，不改变已有结果目录。
-# source("/data01/liuxy/Project/TF_split_stress_hormones_allcelltypes_v2.R",encoding="UTF-8")
-# 本脚本在Source / Rscript时自动运行一次，不必再输入main()。
-# 如只想加载函数：options(tf_layout_v2.skip_main=TRUE) 后 source(...)。
-
 PARENT_DIR <- "/data01/liuxy/Project/CK2_added_v3_Results/Ensemble_PI_Heat_Cold_PEG_with_CK2"
-# 已知上次结果目录时可直接填写，例如 file.path(PARENT_DIR,"TF_activity_rerun_20261028_123456")。
-# NULL：优先采用当前会话已有且含结果的OUT_DIR，否则查找最近完成的一次结果；不新建目录。
+
 SOURCE_RUN_DIR <- NULL
 SESSION_RUN_DIR <- if(exists("OUT_DIR",inherits=FALSE)&&is.character(OUT_DIR)&&length(OUT_DIR)==1L)OUT_DIR else NULL
 SOURCE_PREFIX <- "TF_exactCK_P123_all8_"
 PREFIX <- "TF_layout_split_alltypes_v2_"
 INPUT_RDS <- "/data01/liuxy/Project/muscat_results_ck_ref_paper/CK_reference/CKref_merged_seurat_annotated.rds"
-OUT_DIR <- NULL # main()中固定为已有SOURCE_RUN_DIR
+OUT_DIR <- NULL 
 CELLTYPE_COL <- "cell_type"
 TREATMENT_COL <- "treatment"
 SAMPLE_COL <- "orig.ident"
@@ -25,15 +17,15 @@ GROUPS <- c("CK",TREATMENTS)
 ENDO_TYPES <- paste0("Endodermis_",STATES)
 TYPE_ORDER <- c("Root Cap","Epidermis","Cortex","Dividing Cell","Meristem","QC",
                 ENDO_TYPES,"Pericycle","Procambium","Phloem","Xylem")
-MIN_CELLS_PER_SAMPLE_STAGE <- 10L # 如上次configuration有保存，以保存值为准
+MIN_CELLS_PER_SAMPLE_STAGE <- 10L 
 MIN_REPLICATES <- 2L
-TOP_HEATMAP_TFS <- 60L # 没找到上一张图的列清单时才使用
+TOP_HEATMAP_TFS <- 60L 
 FOCUS_TFS <- character()
-UCELL_MAX_RANK <- 1500L # 以保存结果的maxRank为准
+UCELL_MAX_RANK <- 1500L 
 SCORE_CHUNK <- 1000L
-REUSE_ALLTYPE_SUMMARY <- TRUE # 对输入文件内容、regulon、标签、软件版本等校验后才复用
+REUSE_ALLTYPE_SUMMARY <- TRUE 
 RUN_ALL_CELLTYPES <- TRUE
-# 轻量可复现绘图，不要求ggplot2/pheatmap；全细胞评分需要SeuratObject/Matrix/UCell/BiocParallel。
+
 CELL_WIDTH_MM <- 2.6
 CELL_HEIGHT_MM <- 4.7
 TF_FONT_PT <- 10.5
@@ -160,10 +152,10 @@ family_palette <- function(fams) {
 }
 
 layout_metrics <- function(z,tf_labels,cell_labels,fams) {
-  # 在临时无文件图形设备上按字体实际宽度测量，避免TF标签/右侧细胞名被截断。
+  
   grDevices::pdf(file=NULL,width=14,height=8)
   on.exit(grDevices::dev.off(),add=TRUE)
-  # 垂直标签的横向占用取决于字体高度；字体放大时自动留足间距，避免相邻字母重叠。
+  
   actual_cw<-max(CELL_WIDTH_MM,TF_FONT_PT*25.4/72*1.15)
   body_w<-ncol(z)*actual_cw
   body_h<-nrow(z)*CELL_HEIGHT_MM
@@ -197,7 +189,7 @@ render_dendrogram <- function(hc,w,h) {
 
 render_panel <- function(z,labels,cell_labels,families,colors,tree,co,geom,bounds,subtitle,gaps=integer()) {
   grid::grid.newpage()
-  # 使用mm原点定位，保证导出的PDF/PNG中字体与色块尺寸一致。
+  
   w<-geom$width;h<-geom$height;left<-geom$left;top<-geom$top
   bw<-geom$body_w;bh<-geom$body_h
   ytop<-h-top;nr<-nrow(z);nc<-ncol(z);cw<-bw/nc;ch<-bh/nr
@@ -226,7 +218,7 @@ render_panel <- function(z,labels,cell_labels,families,colors,tree,co,geom,bound
                   just='left',gp=grid::gpar(fontsize=CELLTYPE_FONT_PT,lineheight=.95))
   grid::grid.text(labels,x=grid::unit(xx,'mm'),y=grid::unit(ytop-bh-1.5,'mm'),rot=TF_LABEL_ANGLE,
                   just=c('right','centre'),gp=grid::gpar(fontsize=TF_FONT_PT))
-  # 色标含义由当前图的标题、subtitle与bounds共同指定。
+  
   bx<-left+bw+geom$right_names+2;barh<-min(bh,48)
   grid::grid.rect(x=grid::unit(bx,'mm'),y=grid::unit(ytop-(seq_len(100)-.5)/100*barh,'mm'),
                   width=grid::unit(3.2,'mm'),height=grid::unit(barh/100+.02,'mm'),gp=grid::gpar(fill=rev(palette),col=NA))
@@ -240,7 +232,6 @@ render_panel <- function(z,labels,cell_labels,families,colors,tree,co,geom,bound
   grid::grid.text(fn,x=grid::unit(lx+3,'mm'),y=grid::unit(yy,'mm'),just='left',gp=grid::gpar(fontsize=LEGEND_FONT_PT))
 }
 
-# 每列一个TF，对当前全部处理×三阶段的可用行统一标准化；不填补缺失值。
 column_zscore <- function(m) {
   z<-matrix(NA_real_,nrow(m),ncol(m),dimnames=dimnames(m));qc<-list()
   for(j in seq_len(ncol(m))) {
@@ -282,7 +273,7 @@ plot_heatmap <- function(z,dict,stem,title,subtitle,bounds,gaps=integer(),tree=N
 }
 make_tree <- function(z) {
   if(ncol(z)<2L)return(NULL)
-  # 不填补缺失进行聚类；只用所有显示TF都有数据的行。无充分共同数据时保持原列顺序。
+  
   a<-z[rowSums(is.finite(z))==ncol(z),,drop=FALSE]
   if(nrow(a)<2L)return(NULL)
   stats::hclust(stats::dist(t(a)),method="average")
@@ -301,7 +292,7 @@ resolve_output_directory <- function() {
     if(!length(candidates))stop("未找到 ",SOURCE_PREFIX,"scores_and_stages.rds。请将SOURCE_RUN_DIR设为截图对应的已有结果目录；不需要重跑GENIE3。")
     complete<-file.exists(file.path(candidates,paste0(SOURCE_PREFIX,"SUCCESS.txt")))
     pool<-if(any(complete))candidates[complete] else candidates
-    # 同级时间戳目录中优先最近成功结果；无SUCCESS才用最近已保存评分。
+    
     stamp<-file.info(file.path(pool,paste0(SOURCE_PREFIX,if(any(complete))"SUCCESS.txt" else "scores_and_stages.rds")))$mtime
     chosen<-pool[order(stamp,decreasing=TRUE,na.last=TRUE)[1]]
     reason<-if(any(complete))"Most recently successful existing run" else "Most recent saved scores; no old SUCCESS found"
@@ -334,7 +325,7 @@ load_completed_endodermis <- function() {
     stop("需要这次9条件、P1/P2/P3的已完成结果；不混入旧分期。")
   if(anyNA(m$sample)||any(!nzchar(m$sample)))stop("保存样本ID缺失。")
   design<-unique(m[c("sample","group")]);if(anyDuplicated(design$sample))stop("保存的样本ID跨条件重复。")
-  # 保存评分的m可能不含完全未分配的样本；用原sample_design补回并保留空阶段。
+  
   if(file.exists(srcpath("sample_design.csv"))) {
     ds<-read.csv(srcpath("sample_design.csv"),check.names=FALSE,stringsAsFactors=FALSE)
     if(!all(c("sample","group") %in% names(ds))||anyDuplicated(ds$sample)||anyNA(ds$sample)||anyNA(ds$group)||!all(ds$group %in% GROUPS))stop("原sample_design.csv结构错误。")
@@ -360,7 +351,7 @@ load_completed_endodermis <- function() {
       stop("从保存评分重算的差值无法复现原图；请核对MIN_CELLS或原配置，不静默改动。")
   }
   dict<-validate_dictionary(b$TF_names,colnames(s))
-  # 精确采用你P1图已经展示的TF，不另挑一批产生选择差异。
+  
   plotfile<-srcpath("Figure03_vs_CK_raw_Delta_values.csv")
   if(file.exists(plotfile)) {
     a<-read.csv(plotfile,check.names=FALSE,stringsAsFactors=FALSE)
@@ -373,7 +364,7 @@ load_completed_endodermis <- function() {
   if(!is.list(b$regulons)||!all(selected %in% names(b$regulons)))stop("保存regulon缺少所选TF。")
   reg<-b$regulons[selected]
   if(any(vapply(reg,function(v)!is.character(v)||anyNA(v)||!length(v)||any(!nzchar(v)),logical(1))))stop("regulon靶基因集异常。")
-  # 后续只评分本次展示的TF，节省全部细胞计算量；不是重训网络。
+  
   reg<-lapply(reg,unique)
   z<-column_zscore(delta[,selected,drop=FALSE]);tree<-make_tree(z$z)
   tabout(dict,"TF_display_dictionary.csv")
@@ -429,7 +420,7 @@ make_alltype_metadata <- function(raw,e) {
   m$Stage_source[ok]<-"Exact_saved_P1_P2_P3"
   m$Included<-!is.na(m$Celltype)&nzchar(m$Celltype)&(!isendo|ok)
   m$Exclusion_reason<-ifelse(m$Included,"",ifelse(isendo,"No_accepted_saved_P1_P2_P3","Missing_celltype"))
-  # 所有未分配内皮层保持审计，不画一个伪造的第四阶段。
+  
   audit<-m[!m$Included,,drop=FALSE]
   m<-m[m$Included,,drop=FALSE]
   present<-unique(m$Celltype)
@@ -513,7 +504,7 @@ get_alltype_summary <- function(e) {
       msg("全细胞评分：",sample,"，",nrow(md),"个细胞；",length(e$selected),"个候选regulon。")
       sc<-score_cells(x[,md$cell,drop=FALSE],e$reg)
     } else sc<-matrix(numeric(),nrow=0,ncol=length(e$selected),dimnames=list(character(),e$selected))
-    # 检查新评分能复现同一批内皮层细胞，防止模型/基因背景/软件差异被忽略。
+    
     overlap<-intersect(md$cell,rownames(e$scores))
     error<-if(length(overlap))max(abs(sc[overlap,e$selected,drop=FALSE]-e$scores[overlap,e$selected,drop=FALSE])) else NA_real_
     qcs[[i]]<-data.frame(Sample=sample,Condition=condition,Checked_Endodermis_cells=length(overlap),Max_absolute_UCell_difference=error)
@@ -558,7 +549,7 @@ plot_all_celltypes <- function(a,e) {
                  paste(paste(g,collapse=" / "),"vs CK | all cell types"),
                  "Column Z of Delta across all 8 treatments x cell types; red need not mean positive Delta",c(-3,3),gaps,tree)
   }
-  # 每种处理也单独输出一张：右边仅为celltype，便于像参考图一样排版。
+  
   for(g in TREATMENTS) {
     z<-delta[paste(g,types,sep="|"),,drop=FALSE];rownames(z)<-types
     plot_heatmap(z,e$dict,paste0("Figure06_",g,"_vs_CK_celltypes_right_raw_Delta"),

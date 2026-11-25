@@ -1,16 +1,12 @@
-# 五组激素完整 v1.1（修复固定power=6停止）：CK固定三个表达聚类，定向命名P1/P2/P3；全细胞共识WGCNA；论文式灰色渐变UMAP及紧凑大字GO图。
-# CK + ABA/IAA/MeJA/eBL/SA：12样本全细胞共识WGCNA；新增基因Module UMAP。
-# 单个脚本即可运行；无需source旧脚本。原输入RDS不写回。
-# P1/P2/P3由CK RNA PCA上的k-means(k=3)确定，使用早期参照命名，不使用module评分定义P1。
 MERGED_RDS <- '/data01/liuxy/Project/CK2_added_v3_Results/hdWGCNA_Hormones5_CK2_Endo3_v1/Hormones5_Endo3_v1_all_cells_modules_scored.rds'
 OUT_BASE <- file.path(dirname(MERGED_RDS),'hdWGCNA_Hormones5_CK2_Endo3_v1')
-# 固定新目录，不继承旧会话OUT_DIR。该目录将在服务器首次运行时创建。
+
 OUT_DIR <- OUT_BASE
-# 新建激素分析子目录；重复运行可复用本目录缓存，不写入旧胁迫目录。
+
 FILE_PREFIX <- 'Hormones5_Endo3_v1_'
 NETWORK_NAME <- 'AllCells_Hormones5_Endo3_consensus_v1'
 PIPELINE_VERSION <- 'Hormones5_Endo3_v1_1_adaptive_consensus_power'
-TRAJECTORY_CACHE_VERSION <- 'Hormones5_Endo3_v1_three_clusters_publication_plots' # 与上一版相同，保持CK分段缓存兼容
+TRAJECTORY_CACHE_VERSION <- 'Hormones5_Endo3_v1_three_clusters_publication_plots' 
 SCRIPT_VERSION <- PIPELINE_VERSION
 CELLTYPE_COL <- 'cell_type'
 SAMPLE_COL <- NULL
@@ -23,17 +19,17 @@ HARMONIZE_MES <- FALSE
 CONDITIONS <- c('CK','ABA','IAA','MeJA','eBL','SA')
 TREATMENTS <- CONDITIONS[-1]
 EXPECTED_REPLICATES <- NULL
+MIN_REPLICATES_PER_CONDITION <- 2L
 SEED <- 20261026L
 N_THREADS <- 4L
 RESUME <- TRUE
 
-# 内皮层重新聚类/发育方向。只用CK拟合参考轨迹，五组激素投射到共同参考。
 ENDO_CELLTYPE <- 'Endodermis'
 EARLY_ANCHOR_TYPES <- c('Meristem','QC')
-ROOT_CLUSTER <- NULL # 新三个cluster中的1/2/3；默认用CK Meristem/QC表达接近性命名P1，不继承旧cluster5
-ROOT_CELLS_FILE <- NULL # 可选CSV含cell列；已验证的早期内皮层条码，优先于自动锚定
+ROOT_CLUSTER <- NULL 
+ROOT_CELLS_FILE <- NULL 
 MIN_ROOT_CELLS <- 10L
-REFERENCE_MAX_CELLS_PER_CK <- 1200L # CK1/CK2等量抽样拟合PCA/聚类/轨迹
+REFERENCE_MAX_CELLS_PER_CK <- 1200L 
 TRAJECTORY_N_HVG <- 2500L
 TRAJECTORY_N_PCS <- 20L
 PROJECTION_DISTANCE_QUANTILE <- 0.99
@@ -42,7 +38,7 @@ MIN_CELLS <- 20L
 MIN_METACELL_GROUP <- 40L
 MAX_TRAIN_CELLS_PER_SAMPLE_CT <- 500L
 N_HVG <- 4000L
-USE_INPUT_HVG <- FALSE # 细分内皮层后重新选择HVG
+USE_INPUT_HVG <- FALSE 
 MIN_DETECT_FRACTION <- 0.10
 EXCLUDE_GENES <- character()
 METACELL_K <- 20L
@@ -53,9 +49,9 @@ MIN_MODULE_SIZE <- 30L
 SOFT_POWERS <- c(1:10,seq(12,20,2))
 SOFT_R2 <- 0.80
 SOFT_MIN_K <- 5
-SOFT_POWER_MODE <- 'auto_common_or_per_sample' # 优先共同最小合格power；否则逐样本最小合格power
-SOFT_POWER_FIXED <- 6L # 仅SOFT_POWER_MODE='fixed'时使用；默认不固定6
-# R2>=0.80且mean.k.>=5保持不变；在原候选网格内选择，不按图形猜测。
+SOFT_POWER_MODE <- 'auto_common_or_per_sample' 
+SOFT_POWER_FIXED <- 6L 
+
 SAVE_NETWORK_RDS <- TRUE
 COMPUTE_MES <- TRUE
 COMPUTE_HUBS <- TRUE
@@ -74,24 +70,22 @@ RUN_GO <- TRUE
 ORGDB_PACKAGES <- c('org.Gmax.eg.db','org.G.max.eg.db')
 KEYTYPE_OVERRIDE <- NULL
 MIN_DB_MAPPING_RATE <- 0.20
-GENE_ID_MAP_FILE <- NULL # 列Gene,DB_ID,Package,Keytype；显式跨版本映射，不猜ID
+GENE_ID_MAP_FILE <- NULL 
 MIN_GS_SIZE <- 10L
 MAX_GS_SIZE <- 500L
 MIN_QUERY_GENES <- 5L
 COMPARE_PREVIOUS_MODULES <- FALSE
-OLD_MODULE_FILE <- file.path(dirname(MERGED_RDS),'Ensemble_PI_Heat_Cold_PEG_with_CK2','EndoDev_v4_network_modules.csv') # 上一轮已完成的11个模块，含DevProgram02
+OLD_MODULE_FILE <- file.path(dirname(MERGED_RDS),'Ensemble_PI_Heat_Cold_PEG_with_CK2','EndoDev_v4_network_modules.csv') 
 
-
-# 基因网络UMAP：点为基因；每模块10个hub作为特征，不是只画10个点。
 RUN_MODULE_UMAP <- TRUE
 MODULE_UMAP_N_HUBS <- 10L
 MODULE_UMAP_N_NEIGHBORS <- 15L
 MODULE_UMAP_MIN_DIST <- 0.1
 MODULE_UMAP_EDGE_ALPHA <- 0.25
-MODULE_UMAP_EDGE_PROP <- 0.1  # 10%，不是20%
+MODULE_UMAP_EDGE_PROP <- 0.1  
 MODULE_UMAP_LABEL_HUBS <- 2L
-MODULE_UMAP_SAVE_SVG <- FALSE # TRUE时额外依赖svglite；默认PDF为矢量图
-MODULE_UMAP_ONLY <- FALSE # 核心对象已生成后可设TRUE，仅补画基因UMAP
+MODULE_UMAP_SAVE_SVG <- FALSE 
+MODULE_UMAP_ONLY <- FALSE 
 
 out  <- function(x) file.path(OUT_DIR, paste0(FILE_PREFIX, x))
 csv  <- function(x, name) utils::write.csv(x, out(name), row.names = FALSE,
@@ -165,7 +159,6 @@ cache <- function(name, key, calculate) {
   z
 }
 
-
 bind_rows <- bind
 read_csv <- function(path) utils::read.csv(path, check.names=FALSE, stringsAsFactors=FALSE)
 
@@ -238,7 +231,7 @@ plot_power_diagnostics <- function(selection) {
     ggplot2::theme_bw()+ggplot2::labs(y='Mean connectivity',
                                       title='Consensus network: connectivity diagnostics',subtitle='Outlined points = selected power')
   save_plot(k,'QC_soft_power_connectivity',11,6)
-  # 单样本分面，同时显示两个标准，避免合并曲线遮挡。
+  
   long <- rbind(data.frame(Sample=f$Sample,Power=f$Power,Metric='Signed R2',Value=f$Signed_R2,Chosen=f$Chosen),
                 data.frame(Sample=f$Sample,Power=f$Power,Metric='Mean connectivity',Value=f$mean.k.,Chosen=f$Chosen))
   lines <- data.frame(Metric=c('Signed R2','Mean connectivity'),Cutoff=c(SOFT_R2,SOFT_MIN_K))
@@ -254,7 +247,6 @@ plot_power_diagnostics <- function(selection) {
   }
 }
 
-
 celltype_key <- function(x) {
   z <- trimws(as.character(x))
   hit <- !is.na(z) & canon(z) %in% c('lateralroot', 'procambium')
@@ -262,7 +254,6 @@ celltype_key <- function(x) {
   z
 }
 
-# 样本别名仅映射明确的重复身份。REF/Control 代表处理，不能单独认定为 CK1。
 sample_key <- function(x) {
   all_samples <- c('CK1','CK2','ABA1','ABA2','eBL1','eBL2',
                    'highTemp1','highTemp2','IAA1','IAA2','lowTemp1','lowTemp2',
@@ -301,7 +292,6 @@ resolve_sample_design <- function(md) {
   csv(audit, 'input_sample_identity_audit.csv')
   if (any(conflict)) stop('不同 metadata 列给出矛盾的重复身份，见 input_sample_identity_audit.csv。')
   
-  # 以独立样本身份推导实验条件，再与已有处理列交叉核对。
   design <- data.frame(
     Sample = c('CK1','CK2','ABA1','ABA2','IAA1','IAA2','MEJA1','MEJA2','eBL1','eBL2','SA1','SA2'),
     Condition = rep(CONDITIONS, each = 2),
@@ -340,7 +330,6 @@ resolve_sample_design <- function(md) {
   list(Sample = chosen, Condition = cond, design = design, audit = audit)
 }
 
-# 只在 assay 副本中 JoinLayers，不 subset/改写载入的旧 Seurat，避开旧 reduction 顺序问题。
 extract_counts_readonly <- function(obj, cells, assay = ASSAY) {
   if (!assay %in% names(obj@assays)) stop('缺少 assay：', assay)
   a <- obj@assays[[assay]]
@@ -368,7 +357,6 @@ extract_embedding_readonly <- function(obj, reduction, cells) {
   if (any(!is.finite(emb))) stop(reduction, ' 中存在非有限数值。')
   emb
 }
-
 
 read_data <- function() {
   obj <- readRDS(MERGED_RDS)
@@ -400,7 +388,8 @@ read_data <- function() {
   if (!setequal(pairs$Sample, ids$design$Sample)) stop('过滤缺失注释后丢失了某个目标样本。')
   ns <- table(factor(pairs$Condition, CONDITIONS))
   print(ns)
-  if (any(ns != EXPECTED_REPLICATES)) stop('各条件必须各有两个独立生物学重复。')
+  if (any(ns < MIN_REPLICATES_PER_CONDITION)) stop('各条件独立生物学重复数不足。')
+  if (!is.null(EXPECTED_REPLICATES) && any(ns != EXPECTED_REPLICATES)) stop('重复数与配置不符。')
   if (any(grepl('^[0-9]+$', m$Celltype))) stop('细胞类型列含数字cluster，请使用 cell_type。')
   pairs <- pairs[match(ids$design$Sample, pairs$Sample), , drop = FALSE]
   pairs$Replicate <- ids$design$Replicate
@@ -438,7 +427,7 @@ read_data <- function() {
   
   candidates <- if (is.null(GRAPH_REDUCTION)) c('integrated.rpca','rpca','harmony') else GRAPH_REDUCTION
   hit <- intersect(candidates, names(obj@reductions))
-  # 部分旧降维未覆盖新 CK2 时，自动模式改用 RNA PCA；不使用 UMAP 构网。
+  
   complete <- vapply(hit, function(nm) all(m$cell %in% rownames(obj@reductions[[nm]]@cell.embeddings)), logical(1))
   hit <- hit[complete]
   if (!is.null(GRAPH_REDUCTION) && !length(hit)) stop('指定 GRAPH_REDUCTION 不存在或未覆盖全部目标细胞。')
@@ -448,11 +437,6 @@ read_data <- function() {
        graph = graph, graph_name = if (length(hit)) hit[1] else 'RNA_PCA_new')
 }
 
-
-# -----------------------------------------------------------------------------
-# 6. 共识网络构建
-# -----------------------------------------------------------------------------
-# 验证 metacell 表达矩阵；平均型 metacell 允许小数，不调用原始counts的整数校验。
 validate_metacell_matrix <- function(x, cells, tag) {
   if (length(dim(x)) != 2L || !nrow(x) || !ncol(x)) stop(tag, '：metacell矩阵为空。')
   if (is.null(rownames(x)) || is.null(colnames(x)) ||
@@ -465,8 +449,6 @@ validate_metacell_matrix <- function(x, cells, tag) {
   x
 }
 
-# 取出 hdWGCNA 内部 metacell，合并 RNA counts layers，再转为经典 Assay。
-# 保留 metacell对象的metadata、misc和分组，不重新生成metacell，不平均/取整已聚合矩阵。
 prepare_metacell_rna <- function(train, nm, expected_samples) {
   mc <- hdWGCNA::GetMetacellObject(train, wgcna_name = nm)
   if (!inherits(mc, 'Seurat')) stop('hdWGCNA未返回有效的metacell Seurat对象。')
@@ -484,7 +466,7 @@ prepare_metacell_rna <- function(train, nm, expected_samples) {
   if (inherits(a, 'Assay5')) {
     count_layers <- SeuratObject::Layers(a, search = '^counts')
     if (!length(count_layers)) stop('metacell对象缺少counts层。')
-    # 只对独立 assay 操作；旧 data.* 不复用，下一步统一重新做log-normalization。
+    
     a <- SeuratObject::JoinLayers(a, layers = 'counts', new = 'counts')
     counts <- SeuratObject::LayerData(a, layer = 'counts')
   } else counts <- SeuratObject::GetAssayData(a, slot = 'counts')
@@ -517,7 +499,6 @@ prepare_metacell_rna <- function(train, nm, expected_samples) {
   train
 }
 
-# 在 SetMultiExpr 前复现它所需的逐样本 GetAssayData 访问，尽早发现层/样本缺失问题。
 check_metacell_expression <- function(train, nm, expected_samples) {
   mc <- hdWGCNA::GetMetacellObject(train, wgcna_name = nm)
   if (inherits(mc[['RNA']], 'Assay5')) stop('归一化后metacell RNA重新变成Assay5。')
@@ -539,7 +520,6 @@ prepare_network_input <- function(dat) {
   note('建立跨样本共识网络；首次运行可能需要较长时间。')
   m <- dat$md
   
-  # 6.1 每样本 × 细胞类型抽样，构建平衡训练集
   groups <- split(seq_len(nrow(m)), interaction(m$Sample, m$Celltype, drop = TRUE))
   set.seed(SEED)
   ix <- unlist(lapply(groups, function(i) {
@@ -562,7 +542,6 @@ prepare_network_input <- function(dat) {
   train <- Seurat::NormalizeData(train, verbose = FALSE)
   train <- Seurat::FindVariableFeatures(train, nfeatures = N_HVG, verbose = FALSE)
   
-  # 6.2 基因过滤：至少一种细胞类型中检出率达到阈值（原脚本使用 OR）。
   eligible <- rep(FALSE, nrow(dat$counts))
   names(eligible) <- rownames(dat$counts)
   for (ct in unique(mt$Celltype)) {
@@ -577,7 +556,6 @@ prepare_network_input <- function(dat) {
   if (length(genes) < 200) stop('可用网络基因少于200，检查表达/过滤。')
   csv(data.frame(Gene = genes), 'network_input_genes.csv')
   
-  # 6.3 PCA 或外部降维
   train <- Seurat::ScaleData(train, features = genes, verbose = FALSE)
   npcs  <- min(30L, length(genes) - 1L, ncol(train) - 1L)
   train <- Seurat::RunPCA(train, features = genes, npcs = npcs,
@@ -598,7 +576,6 @@ prepare_network_input <- function(dat) {
     Input_HVG_used = USE_INPUT_HVG && length(dat$input_hvg) > 0),
     'network_reduction.csv')
   
-  # 6.4 hdWGCNA setup + metacell
   train <- hdWGCNA::SetupForWGCNA(train, wgcna_name = nm,
                                   gene_select = 'custom', gene_list = genes)
   train <- hdWGCNA::MetacellsByGroups(
@@ -609,12 +586,11 @@ prepare_network_input <- function(dat) {
     min_cells = MIN_METACELL_GROUP, target_metacells = TARGET_METACELLS,
     reduction = red, dims = seq_len(ndims),
     assay = 'RNA', slot = 'counts', wgcna_name = nm)
-  # 关键修复：必须整理内部 metacell RNA，单独整理 train[['RNA']] 不足以修复报错。
+  
   train <- prepare_metacell_rna(train, nm, sort(unique(mt$Sample)))
   train <- hdWGCNA::NormalizeMetacells(train, wgcna_name = nm, assay = 'RNA', verbose = FALSE)
   check_metacell_expression(train, nm, sort(unique(mt$Sample)))
   
-  # 6.5 构造 multiExpr（每个样本一个数据集）
   train <- hdWGCNA::SetMultiExpr(
     train,
     group_name = 'All', group.by = 'ers_pool',
@@ -651,7 +627,7 @@ build_network <- function(dat) {
                                  sapply(c('hdWGCNA','Seurat','WGCNA'),function(p)as.character(utils::packageVersion(p)))))
   prep <- cache('metacell_input_checkpoint',prepkey,function()prepare_network_input(dat))
   train <- prep$train; multi <- prep$multi; bg <- prep$background; nm <- NETWORK_NAME
-  # 原版在构网成功后才保存整个network_cache；本版提前缓存metacell和诊断表。
+  
   powerkey <- digest::digest(list(multi,SOFT_POWERS,'signed',
                                   as.character(utils::packageVersion('WGCNA'))))
   fits <- cache('soft_power_fit_cache',powerkey,function() {
@@ -681,11 +657,11 @@ build_network <- function(dat) {
   stopifnot(identical(names(powers),names(multi)),all(is.finite(powers)))
   print(selection$selected[,c('Sample','Power','Signed_R2','mean.k.','MultiExpr_index')],row.names=FALSE)
   note('软阈值选择：',selection$mode,'；',paste(names(powers),powers,sep='=',collapse=', '))
-  # 保留参数表；ConstructNetwork按multiExpr顺序接收数值向量。
+  
   csv(data.frame(MultiExpr_index=seq_along(powers),Sample=names(powers),Power=unname(powers)),
       'network_power_vector.csv')
   set.seed(SEED)
-  # 6.7 共识网络 + 模块
+  
   train <- hdWGCNA::ConstructNetwork(
     train, consensus = TRUE, soft_power = unname(powers),
     tom_outdir = out('TOM'), tom_name = 'ERS_consensus',
@@ -717,7 +693,6 @@ build_network <- function(dat) {
   
   list(modules = mods, background = bg, soft = fits, object = train)
 }
-
 
 align_ucell_scores <- function(sc, cells, programs) {
   x <- as.matrix(sc)
@@ -775,7 +750,6 @@ score_modules <- function(dat, net) {
   ans
 }
 
-
 aggregate_scores <- function(scores, md) {
   if (anyDuplicated(md$cell) || anyDuplicated(rownames(scores)) ||
       !all(md$cell %in% rownames(scores))) stop('评分聚合：细胞ID不一致。')
@@ -792,9 +766,6 @@ aggregate_scores <- function(scores, md) {
     mean_nFeature = mean(md$nFeature[i]))))
 }
 
-# -----------------------------------------------------------------------------
-# 8. 样本层面检验 + 共享程序汇总
-# -----------------------------------------------------------------------------
 test_scores <- function(s, adjust_depth = FALSE) {
   res <- list(); status <- list()
   for (ct in unique(s$Celltype)) {
@@ -853,7 +824,6 @@ test_scores <- function(s, adjust_depth = FALSE) {
   list(results = result, status = bind(status))
 }
 
-
 make_full_object <- function(dat, net) {
   x <- SeuratObject::CreateSeuratObject(
     counts = SeuratObject::CreateAssayObject(counts = dat$counts),
@@ -902,7 +872,7 @@ all_gene_seurat_scores <- function(x) {
       assay = 'RNA', nbin = SEURAT_NBIN, ctrl = SEURAT_CTRL,
       seed = SEED, name = 'NatureScore')
   } else {
-    # 单模块避免部分 hdWGCNA 版本 drop=TRUE 导致列名丢失
+    
     tmp <- Seurat::AddModuleScore(
       x,
       features = list(mods$gene_name[mods$module == progs[1]]),
@@ -916,7 +886,6 @@ all_gene_seurat_scores <- function(x) {
   sc <- checked_scores(hdWGCNA::GetModuleScores(x, wgcna_name = NETWORK_NAME),
                        colnames(x), progs, 'Seurat score')
   
-  # 明确对 log-normalized RNA 求均值，规避 AvgModuleExpr 版本差异
   expr <- get_logdata(x)
   av <- vapply(progs, function(p) {
     Matrix::colMeans(expr[mods$gene_name[mods$module == p], , drop = FALSE])
@@ -950,7 +919,7 @@ plot_atlas <- function(mat,md,prefix,label,labels=NULL) {
   ix <- unlist(lapply(split(seq_len(nrow(md)),md$Condition),function(i)
     i[sample.int(length(i),min(length(i),MAX_UMAP_CELLS_PER_CONDITION))]),use.names=FALSE)
   q <- md[ix,,drop=FALSE]; q$Condition <- factor(q$Condition,CONDITIONS)
-  # 色阶从该评分矩阵的全部细胞确定，所有处理及内皮层放大图共用同一模块色阶。
+  
   limits <- setNames(lapply(programs,function(p) module_limits(mat[,p])),programs)
   csv(bind(lapply(programs,function(p) data.frame(Program=p,Low=limits[[p]][1],High=limits[[p]][2],
                                                   Low_color='#E2E2E2',High_color=module_color(p),Scale='Pooled cells 1%-99%; display clipping only'))),
@@ -1032,7 +1001,7 @@ p1_module_evidence <- function(samples,prefix) {
   evidence <- bind(lapply(split(details,interaction(details$Program,details$Condition,drop=TRUE)),function(a)
     data.frame(Program=a$Program[1],Condition=a$Condition[1],N_samples=nrow(a),
                Mean_P1_minus_P2=mean(a$Delta_P1_minus_P2),Mean_P1_minus_P3=mean(a$Delta_P1_minus_P3),
-               Both_replicates_support_P1=nrow(a)==EXPECTED_REPLICATES && all(a$P1_is_highest),
+               Both_replicates_support_P1=nrow(a)>=MIN_REPLICATES_PER_CONDITION && all(a$P1_is_highest),
                Basis='Within-Endodermis stage preference; descriptive, not exclusive cell-type specificity')))
   csv(evidence,paste0(prefix,'_evidence.csv'))
 }
@@ -1049,7 +1018,7 @@ check_previous_program2 <- function(x,md) {
     csv(data.frame(Status='Insufficient_previous_DevProgram02_genes',Genes=length(genes)),
         'previous_Program02_status.csv'); return(invisible(NULL))
   }
-  # 旧Program02基因集合保持固定，新分期独立评估；绝不按评分修改P1身份。
+  
   x <- Seurat::AddModuleScore(x,features=list(genes),assay='RNA',nbin=SEURAT_NBIN,
                               ctrl=SEURAT_CTRL,seed=SEED,name='PreviousDevProgram02Score')
   sc <- as.matrix(x[[]][,'PreviousDevProgram02Score1',drop=FALSE])
@@ -1070,10 +1039,6 @@ check_previous_program2 <- function(x,md) {
   csv(data.frame(Status='Scored_fixed_previous_gene_set',Genes=length(genes)), 'previous_Program02_status.csv')
 }
 
-
-# -----------------------------------------------------------------------------
-# 12. ME / Hub
-# -----------------------------------------------------------------------------
 validate_harmony_design <- function(md) {
   if (!HARMONIZE_MES) return(NULL)
   if (is.null(HARMONY_COL) || !'Batch' %in% names(md))
@@ -1137,7 +1102,6 @@ compute_mes_and_hubs <- function(x, md) {
   result
 }
 
-
 annotate_celltypes <- function(samples) {
   evidence <- list(); summaries <- list(); n <- 0L
   for (cond in CONDITIONS) for (pr in sort(unique(samples$Program))) {
@@ -1147,7 +1111,7 @@ annotate_celltypes <- function(samples) {
     d <- d[d$Celltype %in% complete,]
     label <- 'Insufficient cell-type coverage'
     top <- NA_character_; chosen <- character(); ev <- data.frame()
-    if (length(ns)==EXPECTED_REPLICATES && length(complete)>=3L) {
+    if (length(ns)>=MIN_REPLICATES_PER_CONDITION && length(complete)>=3L) {
       parts <- lapply(ns,function(s) {
         q <- d[d$Sample==s,]; spread <- stats::sd(q$Score)
         q$Z <- if (is.finite(spread) && spread>1e-10) (q$Score-mean(q$Score))/spread else 0
@@ -1178,11 +1142,10 @@ annotate_celltypes <- function(samples) {
   list(summary=bind_rows(summaries),evidence=bind_rows(evidence))
 }
 
-
 normalize_id <- function(x) {
   x <- toupper(trimws(as.character(x)))
   x <- sub('^GLYMA[._-]?', 'GLYMA.', x)
-  # 只清除标准Glyma位点的转录本后缀；不去除v2/v4等基因组版本。
+  
   sub('^(GLYMA[.][0-9]+G[0-9]+)([.](T)?[0-9]+)$','\\1',x)
 }
 map_ids <- function(genes, keys, crosswalk=NULL) {
@@ -1230,7 +1193,7 @@ bp_annotation <- function(db,ids,keytype) {
   bpkeys <- AnnotationDbi::mappedkeys(GO.db::GOBPANCESTOR)
   a <- a[a$GO %in% bpkeys,]
   if (!nrow(a)) return(a)
-  # 自建OrgDb没有GOALL时，显式补BP祖先，与GOALL分析口径一致。
+  
   gs <- split(a$DB_ID,a$GO)
   expanded <- bind_rows(lapply(names(gs),function(g) {
     ancestors <- GO.db::GOBPANCESTOR[[g]]
@@ -1367,8 +1330,6 @@ go_analysis <- function(mods,background,write_table) {
   list(all=tab,significant=sig,status=st,mapping=mp)
 }
 
-
-# ====================== 内皮层参考发育轨迹 ======================
 balance_cells <- function(md,types,max_n) {
   ix <- which(md$Condition=='CK' & md$Celltype %in% types)
   g <- split(ix,md$Sample[ix])
@@ -1382,7 +1343,7 @@ cluster_means <- function(pca,clusters) {
   colnames(z) <- colnames(pca); z
 }
 fit_reference_pca <- function(x,npcs,svd_engine=NULL) {
-  # x必须是CK参考细胞×基因；明确记录变量顺序，不依赖SVD输出dimnames。
+  
   x <- as.matrix(x)
   if(!is.numeric(x) || any(!is.finite(x))) stop('CK PCA训练矩阵含非有限值或不是数值。')
   genes <- colnames(x)
@@ -1399,7 +1360,7 @@ fit_reference_pca <- function(x,npcs,svd_engine=NULL) {
   if(!is.finite(np) || np<3L) stop('过滤零方差基因后，CK参考PCA可用维度不足。')
   z <- sweep(sweep(x,2L,mu,'-'),2L,sigma,'/')
   if(any(!is.finite(z))) stop('CK训练矩阵标准化产生非有限值。')
-  # 明确在已标准化矩阵上做截断SVD；不使用prcomp_irlba的center/scale字段。
+  
   if(is.null(svd_engine)) svd_engine <- function(z,n)
     irlba::irlba(z,nv=n,nu=0L,maxit=1000L,tol=1e-6)
   set.seed(SEED)
@@ -1409,7 +1370,7 @@ fit_reference_pca <- function(x,npcs,svd_engine=NULL) {
     stop('SVD载荷维度异常：预期 ',length(genes),'×',np,'；实际 ',paste(dim(rotation),collapse='×'))
   if(any(!is.finite(rotation)) || length(s$d)!=np || any(!is.finite(s$d)))
     stop('SVD返回无效载荷或奇异值。')
-  # SVD的V行顺序与输入变量顺序相同；在尺寸检查后显式附加基因名。
+  
   pcs <- paste0('CKPC_',seq_len(np))
   dimnames(rotation) <- list(genes,pcs)
   names(mu) <- names(sigma) <- genes
@@ -1463,7 +1424,7 @@ reference_pca <- function(expr,genes,refcells,allcells) {
   trained <- fit_reference_pca(x,TRAJECTORY_N_PCS)
   fit <- trained$fit
   scores <- project_reference_pca(expr,allcells,fit)
-  # 同一CK矩阵经分块投射，必须与训练时计算的分数一致。
+  
   error <- max(abs(scores[refcells,,drop=FALSE]-fit$x))
   if(!is.finite(error) || error>1e-8*max(1,max(abs(fit$x))))
     stop('CK训练得分与重新投射得分不一致。')
@@ -1478,7 +1439,7 @@ reference_pca <- function(expr,genes,refcells,allcells) {
        ' 个PC；投射 ',nrow(scores),' 个细胞。')
   list(fit=fit,scores=scores)
 }
-# 固定三个CK表达聚类；P1/P2/P3不是拟时间三分位，也不使用模块评分决定分组。
+
 nearest_centroid <- function(x,centers) {
   x <- as.matrix(x); centers <- as.matrix(centers)
   if(ncol(x)!=ncol(centers) || any(!is.finite(x)) || any(!is.finite(centers)))
@@ -1492,7 +1453,7 @@ nearest_centroid <- function(x,centers) {
        margin=(ord[,2]-ord[,1])/pmax(ord[,2],1e-12))
 }
 project_fixed_path <- function(x,path) {
-  # 固定参考曲线上的弧长投射：起点不随query样本/分块而重置。
+  
   x <- as.matrix(x); path <- as.matrix(path)
   if(ncol(x)!=ncol(path) || any(!is.finite(x)) || any(!is.finite(path))) stop('轨迹投射输入异常。')
   seg <- path[-1,,drop=FALSE]-path[-nrow(path),,drop=FALSE]
@@ -1580,7 +1541,7 @@ endo_trajectory <- function(dat) {
   z$Reference_fit_cell <- z$cell %in% rownames(rpc)
   z$Stage_status <- ifelse(z$Projection_pass,'Assigned','Assigned_but_distant_from_CK')
   z$Endo_branch <- 'CK_single_axis'
-  # 连续参考轨迹独立于模块评分。拟合不可靠时明确记录并用三中心折线作近似坐标。
+  
   init <- cl$centers[cl$ordered,,drop=FALSE]
   curve <- tryCatch(princurve::principal_curve(rpc,start=init,stretch=1,
                                                approx_points=150,maxit=30),error=function(e)e)
@@ -1610,7 +1571,7 @@ endo_trajectory <- function(dat) {
       'trajectory_model_status.csv')
   csv(z,'Endodermis_three_clusters.csv')
   csv(cl$audit,'trajectory_stage_definition.csv')
-  # cluster marker为描述性均值差，不以细胞数充当生物学重复。
+  
   markers <- bind(lapply(c('P1','P2','P3'),function(stage) {
     ids <- m$cell[refix]; stage_ref <- cl$map[as.character(cl$fit$cluster)]
     delta <- Matrix::rowMeans(expr[,ids[stage_ref==stage],drop=FALSE])-
@@ -1684,7 +1645,6 @@ aggregate_lineage_scores <- function(scores,long) {
   }))
 }
 
-
 stage_interaction_design <- function(sm) {
   sm$Sample <- factor(sm$Sample)
   X <- stats::model.matrix(~0+Sample,data=sm)
@@ -1747,7 +1707,7 @@ stage_dynamics <- function(scores,md,trajectory) {
                                 Reason='Sample intercepts + CK stage + treatment x stage; shared cells may occur in other branch models')
   }
   tests <- bind(tests); bases <- bind(bases)
-  # 联合校正所有已检验模块×分支×处理；不同分支模型可能共享早期细胞，不能当成独立验证。
+  
   if(nrow(tests)) tests$FDR_global <- p.adjust(tests$P_value,'BH')
   else tests <- data.frame(Branch=character(),Program=character(),Treatment=character(),
                            Delta_P2_vs_P1=numeric(),Delta_P3_vs_P1=numeric(),F_statistic=numeric(),P_value=numeric(),FDR_global=numeric())
@@ -1756,7 +1716,7 @@ stage_dynamics <- function(scores,md,trajectory) {
                            Delta_P3_vs_P1=numeric(),F_statistic=numeric(),P_value=numeric(),FDR_global=numeric())
   csv(tests,'stage_condition_interaction_tests.csv'); csv(bases,'CK_development_module_F_tests.csv')
   csv(bind(statuses),'stage_interaction_status.csv'); csv(bind(missing),'stage_interaction_missing_groups.csv')
-  # 分支内阶段的2对2处理比较，缺组由test_scores记录，所有比较统一BH。
+  
   if(nrow(allscores)) {
     aa <- allscores; aa$Celltype <- paste0('Endodermis_',aa$Branch,'_',aa$Period)
     st <- test_scores(aa)
@@ -1774,7 +1734,7 @@ stage_dynamics <- function(scores,md,trajectory) {
                     subtitle='Each line is one biological sample; fixed within-branch CK cutoffs',y='Mean Seurat module score')
     save_plot(g,paste0('Figure12_',b,'_stage_profiles_page',i),13,7)
   }
-  # 连续趋势也按分支分别展示，不把不同分支拟时间平均为一个伪拟时间。
+  
   m <- trajectory$long
   m <- m[m$Projection_pass & !is.na(m$Period) & is.finite(m$Pseudotime01),,drop=FALSE]
   if(nrow(m)) {
@@ -1798,7 +1758,7 @@ stage_dynamics <- function(scores,md,trajectory) {
   }
   peak <- bind(lapply(branches,function(b) bind(lapply(programs,function(p) {
     a <- d[d$Branch==b & d$Program==p & d$Condition=='CK',,drop=FALSE]
-    if(!all(table(factor(a$Period,c('P1','P2','P3')))==EXPECTED_REPLICATES))
+    if(!all(table(factor(a$Period,c('P1','P2','P3')))>=MIN_REPLICATES_PER_CONDITION))
       return(data.frame(Branch=b,Program=p,CK_peak_stage=NA_character_,Status='Insufficient_CK_stages'))
     means <- tapply(a$Score,a$Period,mean)
     data.frame(Branch=b,Program=p,CK_peak_stage=names(means)[which.max(means)],
@@ -1822,9 +1782,6 @@ compare_old_modules <- function(net) {
   csv(result,'old_new_module_overlap_descriptive.csv')
 }
 
-# -----------------------------------------------------------------------------
-# 新增：TOM路径、kME表行名与Module UMAP的版本兼容检查
-# -----------------------------------------------------------------------------
 module_table_for_hdWGCNA <- function(mods) {
   mods <- as.data.frame(mods,stringsAsFactors=FALSE)
   if(!all(c('gene_name','module','color') %in% names(mods)))
@@ -1836,7 +1793,7 @@ module_table_for_hdWGCNA <- function(mods) {
   mods$module <- droplevels(factor(mods$module))
   mods$color <- as.character(mods$color)
   rownames(mods) <- mods$gene_name
-  # 部分hdWGCNA版本的ModuleConnectivity只保留前三列；顺序必须正确。
+  
   mods[,c('gene_name','module','color',setdiff(names(mods),c('gene_name','module','color'))),drop=FALSE]
 }
 
@@ -1852,7 +1809,7 @@ repair_consensus_tom_path <- function(x,nm=NETWORK_NAME) {
   genes <- names(net$colors)
   if(!length(genes) || !identical(as.character(genes),as.character(mods$gene_name)))
     stop('原始网络基因顺序与模块表不一致，不能给TOM猜行名。')
-  # ConstructNetwork旧版会在绝对路径前再次拼接getwd()；使用官方setter纠正。
+  
   net$TOMFiles <- path
   x <- hdWGCNA::SetNetworkData(x,net,wgcna_name=nm)
   csv(data.frame(Network=nm,TOM=path,Genes=length(genes)), 'TOM_path_audit.csv')
@@ -1873,8 +1830,6 @@ api_check_module_umap <- function() {
   invisible(TRUE)
 }
 
-# 使用原始kME按基因名重建绘图大小；修复某些版本依赖data.frame行名导致的NA。
-# 保留原始kME独立列；kME列为模块内0--1缩放，仅用于点大小。
 repair_umap_kme <- function(d,mods) {
   if(!all(c('gene','UMAP1','UMAP2','module','color','hub') %in% names(d)))
     stop('RunModuleUMAP返回表缺少必要列。')
@@ -1900,7 +1855,6 @@ repair_umap_kme <- function(d,mods) {
   d
 }
 
-# PDF/PNG/SVG共用一个保存的igraph，边抽样只执行一次，三个格式内容一致。
 save_module_network_graph <- function(g,d) {
   nodes <- as.character(igraph::V(g)$name)
   ix <- match(nodes,d$gene)
@@ -1908,7 +1862,7 @@ save_module_network_graph <- function(g,d) {
     stop('ModuleUMAPPlot返回网络节点与基因UMAP不一致。')
   xy <- as.matrix(d[ix,c('UMAP1','UMAP2'),drop=FALSE])
   sizes <- 3*d$kME[ix]
-  # 明确每个模块标注排名最高的两个基因，避免top_n并列带来额外标签。
+  
   labels <- unlist(lapply(split(d,as.character(d$module)),function(a)
     head(a$gene[order(-a$kME_raw,a$gene)],MODULE_UMAP_LABEL_HUBS)),use.names=FALSE)
   text <- ifelse(nodes %in% labels,nodes,'')
@@ -1977,7 +1931,7 @@ add_module_gene_umap <- function(x) {
   csv(d,'ModuleUMAP_gene_coordinates.csv')
   saveRDS(d,out('ModuleUMAP_gene_coordinates.rds'))
   saveRDS(x,out('all_cells_modules_scored_with_ModuleUMAP.rds'))
-  # ggplotsvg并非ggplot2函数；使用ggplot，并由ggsave输出文件。
+  
   colors <- unique(d[,c('module','color')])
   if(anyDuplicated(as.character(colors$module))) stop('同一模块有多种颜色。')
   palette <- setNames(as.character(colors$color),as.character(colors$module))
@@ -1993,7 +1947,7 @@ add_module_gene_umap <- function(x) {
   save_plot(p,'Figure15_ModuleUMAP_genes',12,9)
   if(MODULE_UMAP_SAVE_SVG) ggplot2::ggsave(out('Figure15_ModuleUMAP_genes.svg'),p,
                                            width=12,height=9,device=svglite::svglite)
-  # 官方ModuleUMAPPlot先建立图；再显式绘制，兼容旧版函数把标签字号写死为0的问题。
+  
   oldplan <- future::plan(); on.exit(future::plan(oldplan),add=TRUE)
   future::plan(future::sequential)
   set.seed(SEED)
@@ -2013,7 +1967,6 @@ add_module_gene_umap <- function(x) {
   x
 }
 
-# 若核心流程已完成，只补充Module UMAP可把顶部MODULE_UMAP_ONLY改为TRUE。
 module_umap_only <- function() {
   need(c('Seurat','SeuratObject','hdWGCNA','WGCNA','Matrix','ggplot2','uwot','igraph','future','future.apply'))
   if(MODULE_UMAP_SAVE_SVG) need('svglite')
@@ -2113,7 +2066,7 @@ main <- function() {
     list(Status='Error',Message=conditionMessage(e))
   })
   csv(as.data.frame(module_umap),'module_UMAP_status.csv')
-  # 优先org.Gmax.eg.db，自动ID诊断；失败不会改阈值或阻断已经完成的网络结果。
+  
   go <- if(RUN_GO) tryCatch(go_analysis(net$modules,net$background,csv),error=function(e) {
     csv(data.frame(Status='Error',Message=conditionMessage(e)),'GO_error.csv'); note('GO未完成：',conditionMessage(e)); NULL
   }) else NULL
@@ -2151,35 +2104,6 @@ if(!isTRUE(getOption('soybean.hormones.skip_main',FALSE))) {
   if(MODULE_UMAP_ONLY) module_umap_only() else main()
 }
 
-
-
-
-
-
-##11.18
-# ============================================================
-# 已完成网络的补图脚本：原始基因树 + Module色条 + 六组相关性
-# 六行顺序：CK、ABA、SA、IAA、eBL、MEJA。
-# 直接在原服务器运行整个文件；不需要 source 原来的完整分析脚本。
-# 不重新构网、不重新聚类、不读取TOM、不覆盖已有RDS。
-#
-# 下方每列是一个基因，与上方树叶一一对应；不是模块ME相关性图。
-# 每个样本：对其已保存multiExpr中的metacell log-normalized表达取均值。
-# 然后在12个样本上计算 Pearson r：基因表达 vs 各组0/1指示变量。
-# 例如ABA一行：ABA1/ABA2=1，其余10个样本=0；不是ABA vs CK两组比较。
-# 这是样本层面的描述性相关性；不把metacell当作独立生物学重复。
-# 全细胞混合汇总会受细胞类型组成影响，不代表细胞类型内的因果效应。
-# 红=正相关，白=0，蓝=负相关；灰=样本均值零方差等导致无法计算。
-#
-# 保存路径根据你粘贴的 OUT_BASE <- file.path(dirname(MERGED_RDS), ...)
-# 展开，因此下面存在两层同名目录，这是原代码的实际路径。
-# 若你移动过结果，只需修改 RESULT_DIR。
-#
-# 接口依据：
-# https://github.com/smorabit/hdWGCNA/blob/dev/R/ConstructNetwork.R
-# https://github.com/cran/WGCNA/blob/master/R/Functions.R
-# ============================================================
-
 RESULT_DIR <- paste0(
   '/data01/liuxy/Project/CK2_added_v3_Results/',
   'hdWGCNA_Hormones5_CK2_Endo3_v1/',
@@ -2199,8 +2123,6 @@ main <- function() {
   if (length(missing)) stop('请使用原分析R环境；缺少包：', paste(missing, collapse = ', '))
   if (!dir.exists(RESULT_DIR)) stop('结果目录不存在，请修改 RESULT_DIR：\n', RESULT_DIR)
   
-  # 首选构网结束即保存的对象：保留构网时的模块身份和颜色。
-  # 最后一项是原脚本 cache() 保存的 list(key, value) 包装对象。
   candidates <- file.path(RESULT_DIR, paste0(FILE_PREFIX, c(
     'consensus_network_object.rds',
     'all_cells_modules_scored.rds',
@@ -2234,7 +2156,6 @@ main <- function() {
     stop('模块表基因名、模块或颜色无效。')
   invisible(grDevices::col2rgb(mods$color))
   
-  # 原脚本的每组两个生物学样本，显式映射，不从不确定的字符串猜处理。
   design <- data.frame(
     Sample = c('CK1', 'CK2', 'ABA1', 'ABA2', 'SA1', 'SA2',
                'IAA1', 'IAA2', 'eBL1', 'eBL2', 'MEJA1', 'MEJA2'),
@@ -2261,7 +2182,6 @@ main <- function() {
   if (!is.null(names(net$colors)) && !identical(names(net$colors), genes))
     stop('网络与multiExpr的原始基因顺序不同；不能直接映射blockGenes。')
   
-  # 每个样本对metacell取均值；最终12个样本权重相等。
   expr <- t(vapply(seq_along(multi), function(i) {
     d <- as.matrix(multi[[i]]$data)
     if (!is.numeric(d) || !nrow(d) || !identical(colnames(d), genes) ||
@@ -2279,7 +2199,6 @@ main <- function() {
                                                  traits, method = 'pearson')
   if (any(!variable)) message(sum(!variable), '个基因样本均值零方差，相关性显示为灰色。')
   
-  # 使用已经保存的hclust对象，保留原始树与原始高度。
   trees <- net$dendrograms
   if (inherits(trees, 'hclust')) trees <- list(trees)
   if (!is.list(trees) || !length(trees) ||
@@ -2324,13 +2243,13 @@ main <- function() {
     if (length(block_genes) != length(tree$order) ||
         !setequal(tree$order, seq_along(block_genes)))
       stop('树叶数或树叶索引与blockGenes不一致，block=', b)
-    # 某些版本树标签为数值索引；仅当标签是基因名时做额外交叉核对。
+    
     if (!is.null(tree$labels) && all(tree$labels %in% genes) &&
         !identical(as.character(tree$labels), block_genes))
       stop('树标签与blockGenes顺序不一致，block=', b)
     mm <- mods[match(block_genes, mods$gene_name), , drop = FALSE]
     colors <- cbind(Module = mm$color, r_to_color(r[block_genes, , drop = FALSE]))
-    # 不提前按tree$order排序！plotDendroAndColors会内部排序一次。
+    
     leaf_genes <- block_genes[tree$order]
     write_csv(data.frame(Leaf_position = seq_along(leaf_genes), Gene = leaf_genes,
                          Module = mm$module[tree$order], Color = mm$color[tree$order],

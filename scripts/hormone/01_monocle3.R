@@ -1,43 +1,21 @@
-
-# 在RStudio中可 source(..., encoding='UTF-8') 后运行 main_v8()
-
-# -*- coding: UTF-8 -*-
-# -*- coding: UTF-8 -*-
-# 完整独立脚本 v7c：六基因原UMAP表达、六处理对比、拟时配色及重复表达动态。
-# 用法：source('soybean_endodermis_sixgenes_originalUMAP_v7c_ptPlasma.txt', encoding='UTF-8')
-#
-# 相对 v7b 只改了拟时序配色这一件事，RUN_DIR、输出文件名、数值口径、绘图布局完全不变：
-#  (A) PT_COLORS 换成 plasma 连续色带：0 深蓝紫 -> 紫 -> 品红 -> 橙红 -> 亮黄(上限)，
-#      与参考图一致（参考图即 matplotlib plasma）。
-#  (B) 拟时色阶默认改为 linear 连续映射（PT_COLOR_MODE='linear'），颜色随真实拟时值
-#      连续变化，不再把颜色停靠点按分位拉成等间距；原分位版本仍额外输出一份
-#      _pooled_quantile 对照文件（PT_ALSO_EMIT_QUANTILE <- FALSE 可完全不输出）。
-#  (C) 色条刻度改为整齐圆整值（0/5/10/15/20），linear 模式按真实数值定位；分位模式
-#      仍标注真实分位值（PT_LEGEND_NICE_TICKS <- FALSE 可关掉圆整）。
-#
-# 沿用 v7b 的三处修复：不加载 org.G.max.eg.db / AnnotationDbi；sessionInfo 安全写出；
-# smooth.spline 自由度自适应且静默，不再出现 "smoothing parameter too large" 警告。
-#
-# 只加载已存CDS和CSV，不修改UMAP/轨迹/根/拟时序，不运行降维、graph_test或GO。
-# PDF/PNG/CSV直接写回原RUN_DIR，文件名前缀由 OUT_PREFIX 控制（默认仍为 v7）。
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
 OUT_PREFIX <- 'v7'
 TARGET_GENES <- c('Glyma.17G152800','Glyma.06G050000','Glyma.09G139000',
                   'Glyma.06G003800','Glyma.13G094400','Glyma.12G173300')
 USER_LABELS <- c('ARR-B candidate','MYB84/RAX3-like','MYB candidate','MYB48-like','MYB36-like','RING-CH candidate')
-# 上述短名仅来自用户提供注释，不作为本次验证过的正交同源或功能结论。
+
 GROUPS <- c('CK','ABA','eBL','IAA','MeJA','SA')
 GROUP_COLORS <- c(CK='#4D4D4D',ABA='#D55E00',eBL='#009E73',IAA='#0072B2',MeJA='#CC79A7',SA='#E69F00')
 PREFERRED_DB_VERSION <- 'v4'
-FEATURE_OVERRIDES <- NULL  # 可选命名向量：c('Glyma.17G152800'='实际矩阵行名')
-PT_COLOR_MODE <- 'linear' # 主图：颜色随真实拟时值连续变化（参考图口径）；也可改回 'pooled_quantile'
-PT_ALSO_EMIT_QUANTILE <- TRUE # 额外输出一份分位间距版本作对照；FALSE 则只出主图
-PT_LEGEND_NICE_TICKS <- TRUE # 色条刻度用整齐圆整值（0/5/10/15/20）
+FEATURE_OVERRIDES <- NULL  
+PT_COLOR_MODE <- 'linear' 
+PT_ALSO_EMIT_QUANTILE <- TRUE 
+PT_LEGEND_NICE_TICKS <- TRUE 
 PT_PROBS <- c(0,.10,.35,.65,.90,1)
-# plasma 连续色带：0=深蓝紫 -> 紫 -> 品红 -> 橙红 -> 亮黄=上限，与参考图色条一致。
+
 PT_COLORS <- c('#0D0887','#6A00A8','#B12A90','#E16462','#FCA636','#F0F921')
 EXPRESSION_COLORS <- c('#352A87','#8157B7','#C44C8A','#EC8A55','#F3D55B')
-EXPR_UPPER_QUANTILE <- .99 # 同一基因全部细胞正表达值的99%分位；高于阈值饱和但原数值保留
+EXPR_UPPER_QUANTILE <- .99 
 ZERO_COLOR <- '#D9D9D9'
 POINT_CEX <- .45
 DRAW_GRAPH_ON_GENE_MAP <- TRUE
@@ -102,15 +80,13 @@ save_v7 <- function(stem,fun,width=12,height=8) {
   tryCatch(fun(),finally=dev.off())
 }
 
-# 安全包版本查询：DESCRIPTION 缺失/损坏的包返回 NA，绝不抛出
-# "Error in x[['Version']] : subscript out of bounds"。
 pkg_version_chr <- function(pkg) {
   tryCatch({
     v<-suppressWarnings(utils::packageVersion(pkg))
     if(is.null(v)||!length(v))NA_character_ else as.character(v)
   },error=function(e)NA_character_,warning=function(w)NA_character_)
 }
-# 安全加载检查：坏包只返回 FALSE，不会让脚本中止在 requireNamespace 内部。
+
 pkg_available <- function(pkg) {
   isTRUE(suppressWarnings(suppressMessages(tryCatch(
     requireNamespace(pkg,quietly=TRUE),error=function(e)FALSE))))
@@ -129,7 +105,7 @@ write_session_info_v7 <- function(file,root) {
     L<-c(L,sprintf('  %-30s %s',p,if(is.na(v))'unknown' else v))
   }
   tryCatch(writeLines(L,file,useBytes=FALSE),error=function(e)NULL)
-  # 完整 sessionInfo 只作附加信息，失败也不影响主流程。
+  
   si<-suppressWarnings(tryCatch(utils::capture.output(utils::sessionInfo()),error=function(e)NULL))
   if(length(si))
     tryCatch(writeLines(si,file.path(root,paste0(OUT_PREFIX,'_sessionInfo_full.txt')),useBytes=FALSE),
@@ -145,7 +121,7 @@ make_pt_scale <- function(pt,mode=PT_COLOR_MODE) {
   knots<-if(mode=='linear')seq(min(v),max(v),length.out=length(PT_COLORS)) else
     as.numeric(quantile(v,PT_PROBS,names=FALSE,type=7))
   knots<-unique(knots)
-  # 若大量拟时并列，则合并重复断点；始终保持颜色映射单调。
+  
   list(knots=knots,colors=colorRampPalette(PT_COLORS)(length(knots)),mode=mode)
 }
 color_by_scale <- function(values,scale,na_color='#C5C5C5') {
@@ -172,7 +148,7 @@ color_legend_v7 <- function(scale,title) {
   }
   y<-seq(.15,.87,length.out=257)
   rect(.15,head(y,-1),.4,tail(y,-1),col=colorRampPalette(scale$colors)(256),border=NA)
-  # 数值 -> 色条纵向位置：linear 模式即连续渐变，分位模式等价于原等间距断点。
+  
   ypos<-function(v)approx(scale$knots,seq(.15,.87,length.out=length(scale$knots)),
                           xout=v,rule=2,ties='ordered')$y
   tv<-scale$knots
@@ -200,7 +176,7 @@ draw_umap_v7 <- function(d,ix,values,scale,title,edges=NULL,nodes=NULL,root_node
   }
   vv<-values[ix];cols<-color_by_scale(vv,scale)
   if(expression)cols[is.finite(vv)&vv==0]<-ZERO_COLOR
-  # 低值先画，高值后画，避免高表达细胞被零表达覆盖；坐标不变。
+  
   ord<-order(vv,na.last=FALSE)
   points(d$x[ix[ord]],d$y[ix[ord]],pch=16,col=cols[ord],cex=POINT_CEX)
   if(length(root_nodes)&&!is.null(nodes)) {
@@ -209,10 +185,6 @@ draw_umap_v7 <- function(d,ix,values,scale,title,edges=NULL,nodes=NULL,root_node
   }
 }
 
-# 仅在同一路径内求曲线；各处理/重复使用同一套分箱边界。
-# 缺失箱为NA并断线；样条只在至少4个连续有效箱内求值，不跨缺失区域或向外推。
-# df 至少比有效点数少2，且拟合全程 suppressWarnings，避免
-#"smoothing parameter value too large / setting df = 1" 警告（不改变曲线口径）。
 smooth_contiguous <- function(pt,value,valid,df=SMOOTH_DF) {
   out<-rep(NA_real_,length(pt))
   if(!any(valid))return(out)
@@ -268,7 +240,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
   csv<-function(x,nm)write.csv(x,file.path(root,paste0(OUT_PREFIX,'_',nm,'.csv')),row.names=FALSE,na='')
   settings<-list();expr_scales<-lapply(seq_len(nrow(ex)),function(i)make_expr_scale(ex[i,]))
   names(expr_scales)<-rownames(ex)
-  # 1. 第二张图重新着色；每个分量各自定义色阶，六处理共用，绝不按每组拉伸。
+  
   for(cc in unique(d$component)) {
     ids<-which(d$component==cc & is.finite(d$local_pseudotime))
     if(!length(ids))next
@@ -292,7 +264,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
     }
   }
   csv(do.call(rbind,settings),'pseudotime_color_knots')
-  # 2. 六基因总体图：各基因单独色阶，数值上限明确写出；同一基因所有组范围一致。
+  
   save_v7(file.path(root,paste0(OUT_PREFIX,'_sixgenes_originalUMAP_overview')),function() {
     par(mfrow=c(2,3),oma=c(2,0,2,0))
     for(g in TARGET_GENES) {
@@ -319,7 +291,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
                    '; values above cap=',sc$n_clipped,'. Grey: zero; pale background: reference cells.'),1,outer=TRUE,cex=.75)
     },14,9)
   }
-  # 3. 保存每个生物学重复的表达/检测率，避免用单细胞数代替重复数。
+  
   summary<-list()
   for(g in TARGET_GENES)for(tg in GROUPS)for(s in unique(d$sample[d$treatment==tg])) {
     v<-ex[g,d$treatment==tg & d$sample==s];v<-v[is.finite(v)]
@@ -331,7 +303,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
   csv(do.call(rbind,lapply(TARGET_GENES,function(g)data.frame(gene=g,
                                                               upper=expr_scales[[g]]$upper,positive_quantile=EXPR_UPPER_QUANTILE,n_clipped=expr_scales[[g]]$n_clipped))),
       'expression_color_limits')
-  # 4. 每路径、每基因的六处理拟时表达曲线，两个重复各画一条；不跨分支混合。
+  
   status<-list()
   if(!is.null(paths)&&!is.null(path_nodes)) {
     if(!is.null(SELECT_PATHS)) {
@@ -416,14 +388,13 @@ main_v7 <- function() {
   write.csv(data.frame(cell=d$cell,treatment=d$treatment,sample=d$sample,
                        component=d$component,local_pseudotime=d$local_pseudotime,t(ex),check.names=FALSE),
             file.path(root,paste0(OUT_PREFIX,'_sixgenes_cell_expression.csv')),row.names=FALSE,na='')
-  # 保留已有graph_test统计的原始字段，不把其q值解释成处理差异p值。
+  
   gt<-read_table_v7(root,'25_graph_test_pooled_candidate_screen.csv',FALSE)
   if(!is.null(gt)&&'feature_id' %in% names(gt)) {
     stats<-merge(mapping,gt,by.x='feature_id_in_counts',by.y='feature_id',all.x=TRUE,sort=FALSE)
     write.csv(stats,file.path(root,paste0(OUT_PREFIX,'_sixgenes_cached_pooled_graph_test.csv')),row.names=FALSE,na='')
   }
-  # 注释数据库分支已整体移除：不加载 org.G.max.eg.db / AnnotationDbi，不做 AnnotationDbi::select。
-  # 基因行号只靠 match_soybean_gid() 对 rownames(counts) 的字符串解析确定。
+  
   writeLines(c('OrgDb annotation intentionally skipped in this version (v7c).',
                'org.G.max.eg.db and AnnotationDbi are never loaded, so a broken DESCRIPTION cannot abort the run.',
                'Gene identity in the expression matrices comes only from Glyma-ID string matching against rownames(counts);',
@@ -458,37 +429,22 @@ main_v7 <- function() {
 }
 
 main_v7()
-# 完整独立脚本 v7b：六基因原UMAP表达、六处理对比、拟时配色及重复表达动态。
-# 用法：source('soybean_endodermis_sixgenes_originalUMAP_v7b_noOrgDb.R', encoding='UTF-8')
-#
-# 相对 v7 只有三处改动，其余逻辑、输出目录、数值口径完全不变：
-#  (1) 彻底移除 org.G.max.eg.db / AnnotationDbi：不再定义 ORGDB_PACKAGE、不再
-#      requireNamespace、不再 AnnotationDbi::select。目标基因 -> counts 行名的对应
-#      只依赖字符串解析 match_soybean_gid()（v4 版本优先），不需要任何注释数据库。
-#      因此 "DESCRIPTION file is missing or broken" 这条警告不会再出现。
-#  (2) 结尾的 sessionInfo() 换成不会抛错的安全版本：逐包 tryCatch 取版本，任何一个包
-#      的 DESCRIPTION 损坏都只记为 unknown，不会让脚本以
-#      "Error in x[['Version']] : subscript out of bounds" 中止。
-#  (3) smooth_contiguous() 的自由度改为 min(SMOOTH_DF, 有效点数 - 2) 并 suppressWarnings，
-#      消除 "smoothing parameter value too large / setting df = 1" 警告；曲线口径不变。
-#
-# 只加载已存CDS和CSV，不修改UMAP/轨迹/根/拟时序，不运行降维、graph_test或GO。
-# PDF/PNG/CSV直接写回原RUN_DIR，文件名前缀由 OUT_PREFIX 控制（默认仍为 v7）。
+
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
 OUT_PREFIX <- 'v7'
 TARGET_GENES <- c('Glyma.17G152800','Glyma.06G050000','Glyma.09G139000',
                   'Glyma.06G003800','Glyma.13G094400','Glyma.12G173300')
 USER_LABELS <- c('ARR-B candidate','MYB84/RAX3-like','MYB candidate','MYB48-like','MYB36-like','RING-CH candidate')
-# 上述短名仅来自用户提供注释，不作为本次验证过的正交同源或功能结论。
+
 GROUPS <- c('CK','ABA','eBL','IAA','MeJA','SA')
 GROUP_COLORS <- c(CK='#4D4D4D',ABA='#D55E00',eBL='#009E73',IAA='#0072B2',MeJA='#CC79A7',SA='#E69F00')
 PREFERRED_DB_VERSION <- 'v4'
-FEATURE_OVERRIDES <- NULL  # 可选命名向量：c('Glyma.17G152800'='实际矩阵行名')
-PT_COLOR_MODE <- 'pooled_quantile' # 或linear；默认同时输出线性对照
+FEATURE_OVERRIDES <- NULL  
+PT_COLOR_MODE <- 'pooled_quantile' 
 PT_PROBS <- c(0,.10,.35,.65,.90,1)
 PT_COLORS <- c('#243B8A','#007FA8','#60C2B0','#F4D166','#E47D31','#8C1D40')
 EXPRESSION_COLORS <- c('#352A87','#8157B7','#C44C8A','#EC8A55','#F3D55B')
-EXPR_UPPER_QUANTILE <- .99 # 同一基因全部细胞正表达值的99%分位；高于阈值饱和但原数值保留
+EXPR_UPPER_QUANTILE <- .99 
 ZERO_COLOR <- '#D9D9D9'
 POINT_CEX <- .45
 DRAW_GRAPH_ON_GENE_MAP <- TRUE
@@ -553,15 +509,13 @@ save_v7 <- function(stem,fun,width=12,height=8) {
   tryCatch(fun(),finally=dev.off())
 }
 
-# 安全包版本查询：DESCRIPTION 缺失/损坏的包返回 NA，绝不抛出
-# "Error in x[['Version']] : subscript out of bounds"。
 pkg_version_chr <- function(pkg) {
   tryCatch({
     v<-suppressWarnings(utils::packageVersion(pkg))
     if(is.null(v)||!length(v))NA_character_ else as.character(v)
   },error=function(e)NA_character_,warning=function(w)NA_character_)
 }
-# 安全加载检查：坏包只返回 FALSE，不会让脚本中止在 requireNamespace 内部。
+
 pkg_available <- function(pkg) {
   isTRUE(suppressWarnings(suppressMessages(tryCatch(
     requireNamespace(pkg,quietly=TRUE),error=function(e)FALSE))))
@@ -580,7 +534,7 @@ write_session_info_v7 <- function(file,root) {
     L<-c(L,sprintf('  %-30s %s',p,if(is.na(v))'unknown' else v))
   }
   tryCatch(writeLines(L,file,useBytes=FALSE),error=function(e)NULL)
-  # 完整 sessionInfo 只作附加信息，失败也不影响主流程。
+  
   si<-suppressWarnings(tryCatch(utils::capture.output(utils::sessionInfo()),error=function(e)NULL))
   if(length(si))
     tryCatch(writeLines(si,file.path(root,paste0(OUT_PREFIX,'_sessionInfo_full.txt')),useBytes=FALSE),
@@ -596,7 +550,7 @@ make_pt_scale <- function(pt,mode=PT_COLOR_MODE) {
   knots<-if(mode=='linear')seq(min(v),max(v),length.out=length(PT_COLORS)) else
     as.numeric(quantile(v,PT_PROBS,names=FALSE,type=7))
   knots<-unique(knots)
-  # 若大量拟时并列，则合并重复断点；始终保持颜色映射单调。
+  
   list(knots=knots,colors=colorRampPalette(PT_COLORS)(length(knots)),mode=mode)
 }
 color_by_scale <- function(values,scale,na_color='#C5C5C5') {
@@ -642,7 +596,7 @@ draw_umap_v7 <- function(d,ix,values,scale,title,edges=NULL,nodes=NULL,root_node
   }
   vv<-values[ix];cols<-color_by_scale(vv,scale)
   if(expression)cols[is.finite(vv)&vv==0]<-ZERO_COLOR
-  # 低值先画，高值后画，避免高表达细胞被零表达覆盖；坐标不变。
+  
   ord<-order(vv,na.last=FALSE)
   points(d$x[ix[ord]],d$y[ix[ord]],pch=16,col=cols[ord],cex=POINT_CEX)
   if(length(root_nodes)&&!is.null(nodes)) {
@@ -651,10 +605,6 @@ draw_umap_v7 <- function(d,ix,values,scale,title,edges=NULL,nodes=NULL,root_node
   }
 }
 
-# 仅在同一路径内求曲线；各处理/重复使用同一套分箱边界。
-# 缺失箱为NA并断线；样条只在至少4个连续有效箱内求值，不跨缺失区域或向外推。
-# df 至少比有效点数少2，且拟合全程 suppressWarnings，避免
-#"smoothing parameter value too large / setting df = 1" 警告（不改变曲线口径）。
 smooth_contiguous <- function(pt,value,valid,df=SMOOTH_DF) {
   out<-rep(NA_real_,length(pt))
   if(!any(valid))return(out)
@@ -710,7 +660,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
   csv<-function(x,nm)write.csv(x,file.path(root,paste0(OUT_PREFIX,'_',nm,'.csv')),row.names=FALSE,na='')
   settings<-list();expr_scales<-lapply(seq_len(nrow(ex)),function(i)make_expr_scale(ex[i,]))
   names(expr_scales)<-rownames(ex)
-  # 1. 第二张图重新着色；每个分量各自定义色阶，六处理共用，绝不按每组拉伸。
+  
   for(cc in unique(d$component)) {
     ids<-which(d$component==cc & is.finite(d$local_pseudotime))
     if(!length(ids))next
@@ -734,7 +684,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
     }
   }
   csv(do.call(rbind,settings),'pseudotime_color_knots')
-  # 2. 六基因总体图：各基因单独色阶，数值上限明确写出；同一基因所有组范围一致。
+  
   save_v7(file.path(root,paste0(OUT_PREFIX,'_sixgenes_originalUMAP_overview')),function() {
     par(mfrow=c(2,3),oma=c(2,0,2,0))
     for(g in TARGET_GENES) {
@@ -761,7 +711,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
                    '; values above cap=',sc$n_clipped,'. Grey: zero; pale background: reference cells.'),1,outer=TRUE,cex=.75)
     },14,9)
   }
-  # 3. 保存每个生物学重复的表达/检测率，避免用单细胞数代替重复数。
+  
   summary<-list()
   for(g in TARGET_GENES)for(tg in GROUPS)for(s in unique(d$sample[d$treatment==tg])) {
     v<-ex[g,d$treatment==tg & d$sample==s];v<-v[is.finite(v)]
@@ -773,7 +723,7 @@ render_analysis_v7 <- function(d,ex,edges,nodes,roots,paths,path_nodes,root) {
   csv(do.call(rbind,lapply(TARGET_GENES,function(g)data.frame(gene=g,
                                                               upper=expr_scales[[g]]$upper,positive_quantile=EXPR_UPPER_QUANTILE,n_clipped=expr_scales[[g]]$n_clipped))),
       'expression_color_limits')
-  # 4. 每路径、每基因的六处理拟时表达曲线，两个重复各画一条；不跨分支混合。
+  
   status<-list()
   if(!is.null(paths)&&!is.null(path_nodes)) {
     if(!is.null(SELECT_PATHS)) {
@@ -858,14 +808,13 @@ main_v7 <- function() {
   write.csv(data.frame(cell=d$cell,treatment=d$treatment,sample=d$sample,
                        component=d$component,local_pseudotime=d$local_pseudotime,t(ex),check.names=FALSE),
             file.path(root,paste0(OUT_PREFIX,'_sixgenes_cell_expression.csv')),row.names=FALSE,na='')
-  # 保留已有graph_test统计的原始字段，不把其q值解释成处理差异p值。
+  
   gt<-read_table_v7(root,'25_graph_test_pooled_candidate_screen.csv',FALSE)
   if(!is.null(gt)&&'feature_id' %in% names(gt)) {
     stats<-merge(mapping,gt,by.x='feature_id_in_counts',by.y='feature_id',all.x=TRUE,sort=FALSE)
     write.csv(stats,file.path(root,paste0(OUT_PREFIX,'_sixgenes_cached_pooled_graph_test.csv')),row.names=FALSE,na='')
   }
-  # 注释数据库分支已整体移除：不加载 org.G.max.eg.db / AnnotationDbi，不做 AnnotationDbi::select。
-  # 基因行号只靠 match_soybean_gid() 对 rownames(counts) 的字符串解析确定。
+  
   writeLines(c('OrgDb annotation intentionally skipped in this version (v7b).',
                'org.G.max.eg.db and AnnotationDbi are never loaded, so a broken DESCRIPTION cannot abort the run.',
                'Gene identity in the expression matrices comes only from Glyma-ID string matching against rownames(counts);',
@@ -899,27 +848,11 @@ main_v7 <- function() {
 
 main_v7()
 
-
-
-
-## ============================================================
-## M9 (HormoneProgram09) Top hub 基因 × 细胞类型/胁迫 表达热图
-## ============================================================
-## ============================================================
-## M9 (HormoneProgram09) Top hub 基因 × 细胞类型 × 五种激素 表达热图
-## 激素：ABA, IAA, eBL, MeJA, SA
-## ============================================================
-## M9 (HormoneProgram09) Top hub 基因 × 细胞类型 × 五种激素 表达热图
-## 激素：ABA, IAA, eBL, MeJA, SA
-## 数据：长表，激素标签在 contrast 列（形如 ABA-REF）
-## ============================================================
-
 library(data.table)
 library(ggplot2)
 library(pheatmap)
 library(dplyr)
 
-## ---------- 1. DEG 文件自动查找 ----------
 PAPER_DIR <- "/data01/liuxy/Project/muscat_results_ck_ref_paper"
 DEG_FILE_CANDIDATES <- c(
   file.path(PAPER_DIR, "All_DEG_filtered_paper_thresholds.csv"),
@@ -931,7 +864,6 @@ DEG_FILE <- DEG_FILE_CANDIDATES[file.exists(DEG_FILE_CANDIDATES)][1]
 if (is.na(DEG_FILE)) stop("找不到 DEG 文件")
 cat("读取 DEG 文件：", DEG_FILE, "\n")
 
-## ---------- 2. 读取 Top50 kME 表，筛 M9 (HormoneProgram09) ----------
 top50 <- read.csv(
   "/data01/liuxy/Project/CK2_added_v3_Results/hdWGCNA_Hormones5_CK2_Endo3_v1/Hormones5_Endo3_v1_module_Top50_kME.csv"
 )
@@ -940,7 +872,6 @@ m9_top50 <- m9_top50[order(-m9_top50$kME), ]
 target_genes <- m9_top50$Gene
 cat("纳入热图的 M9 基因数：", length(target_genes), "\n")
 
-## ---------- 3. 读取 DEG 表 ----------
 deg <- fread(DEG_FILE)
 
 col_gene     <- "gene"
@@ -948,16 +879,13 @@ col_cell     <- "cluster_id"
 col_contrast <- "contrast"
 col_log2fc   <- "logFC"
 
-## ---------- 4. 解析 contrast -> 激素名，只保留五种激素 ----------
-## contrast 形如：ABA-REF / eBL-REF / IAA-REF / MEJA-REF / SA-REF ...
 parse_hormone <- function(x) {
-  x <- sub("-REF$", "", x)          # 去掉尾部 -REF
-  x <- sub("_vs_REF$", "", x)       # 兼容 comparison 写法
+  x <- sub("-REF$", "", x)          
+  x <- sub("_vs_REF$", "", x)       
   x
 }
 deg[, Hormone := parse_hormone(get(col_contrast))]
 
-## 统一命名（MEJA -> MeJA）
 hormone_rename <- c(
   "ABA"  = "ABA",
   "IAA"  = "IAA",
@@ -976,18 +904,15 @@ deg <- deg[Hormone %in% KEEP_HORMONE]
 cat("\n保留激素：", paste(unique(deg$Hormone), collapse = ", "),
     "；行数：", nrow(deg), "\n")
 
-## ---------- 5. 筛选目标基因 ----------
 sub <- deg[get(col_gene) %in% target_genes]
 if (nrow(sub) == 0) stop("目标基因在 DEG 表中未匹配到，请检查基因 ID")
 cat("筛选后行数：", nrow(sub), "\n")
 
-## 核对：有多少 M9 基因在 DEG 表里出现过
 hit <- target_genes[target_genes %in% unique(sub[[col_gene]])]
 cat("在 DEG 中命中的基因数：", length(hit), "/", length(target_genes), "\n")
 miss <- setdiff(target_genes, unique(sub[[col_gene]]))
 if (length(miss) > 0) cat("未命中：", paste(miss, collapse = ", "), "\n")
 
-## ---------- 6. 长表 -> 宽表：行为基因，列为 细胞类型_激素 ----------
 sub[, combo := paste(get(col_cell), Hormone, sep = "|")]
 
 wide <- dcast(
@@ -1003,13 +928,11 @@ mat <- as.matrix(wide[, -1, with = FALSE])
 rownames(mat) <- genes_vec
 mat <- mat[target_genes[target_genes %in% rownames(mat)], , drop = FALSE]
 
-## ---------- 7. 顶部注释 ----------
 annot_cols <- data.table(combo = colnames(mat))
 annot_cols[, c("Cell_Type", "Hormone") := tstrsplit(combo, "\\|")]
 annot_col_df <- as.data.frame(annot_cols[, .(Cell_Type, Hormone)])
 rownames(annot_col_df) <- annot_cols$combo
 
-## ---------- 8. 配色 ----------
 cell_type_colors <- c(
   "Cortex"        = "#7fd4c1",
   "Dividing Cell" = "#fcf9a8",
@@ -1035,7 +958,6 @@ ann_colors <- list(
   Hormone   = hormone_colors[names(hormone_colors) %in% annot_col_df$Hormone]
 )
 
-## ---------- 9. 画热图 ----------
 hm_colors <- colorRampPalette(c("#3949ab", "#9fa8da", "#eeeeee", "#ef9a9a", "#b71c1c"))(100)
 
 out_pdf <- file.path(PAPER_DIR, "M9_hub_genes_hormone_heatmap.pdf")
@@ -1064,13 +986,11 @@ cat("热图已保存：", out_pdf, "\n")
 fwrite(sub, file.path(PAPER_DIR, "M9_hub_genes_hormone_expression.csv"))
 cat("筛选明细表已导出：", file.path(PAPER_DIR, "M9_hub_genes_hormone_expression.csv"), "\n")
 
-
 library(data.table)
 library(ggplot2)
 library(pheatmap)
 library(dplyr)
 
-## ---------- 1. DEG 文件自动查找 ----------
 PAPER_DIR <- "/data01/liuxy/Project/muscat_results_ck_ref_paper"
 DEG_FILE_CANDIDATES <- c(
   file.path(PAPER_DIR, "All_DEG_filtered_paper_thresholds.csv"),
@@ -1082,7 +1002,6 @@ DEG_FILE <- DEG_FILE_CANDIDATES[file.exists(DEG_FILE_CANDIDATES)][1]
 if (is.na(DEG_FILE)) stop("找不到 DEG 文件")
 cat("读取 DEG 文件：", DEG_FILE, "\n")
 
-## ---------- 2. 读取 Top50 kME 表，筛 M9 (HormoneProgram09) ----------
 top50 <- read.csv(
   "/data01/liuxy/Project/CK2_added_v3_Results/hdWGCNA_Hormones5_CK2_Endo3_v1/Hormones5_Endo3_v1_module_Top50_kME.csv"
 )
@@ -1091,30 +1010,24 @@ m9_top50 <- top50[top50$Program == "HormoneProgram09", ]
 m9_top50 <- m9_top50[order(-m9_top50$kME), ]
 print(m9_top50, row.names = FALSE)
 
-## 基因列名在你的 CSV 里是 Gene（大写 G）
 target_genes <- m9_top50$Gene
 cat("纳入热图的 M9 基因数：", length(target_genes), "\n")
 
-## ---------- 3. 读取 DEG 表 ----------
 deg <- fread(DEG_FILE)
 cat("DEG 表列名：\n"); print(colnames(deg))
 
-## 按你实际列名固定映射
 col_gene   <- "gene"
 col_cell   <- "cluster_id"
 col_contrast <- "contrast"
 col_log2fc <- "logFC"
 
-## ---------- 4. 解析 contrast -> 激素名，只保留五种激素 ----------
-## contrast 形如 ABA_vs_REF / IAA1_vs_REF1 / eBL2_vs_REF2 ...
 parse_hormone <- function(x) {
-  x <- sub("_vs_.*$", "", x)          # 去掉 _vs_REF...
-  x <- sub("[0-9]+$", "", x)          # 去掉尾部重复编号 1/2
+  x <- sub("_vs_.*$", "", x)          
+  x <- sub("[0-9]+$", "", x)          
   x
 }
 deg[, Hormone := parse_hormone(get(col_contrast))]
 
-## 五组激素统一命名（MEJA -> MeJA，与图例一致）
 hormone_rename <- c(
   "ABA"  = "ABA",
   "IAA"  = "IAA",
@@ -1129,12 +1042,10 @@ KEEP_HORMONE <- c("ABA", "IAA", "eBL", "MeJA", "SA")
 deg <- deg[Hormone %in% KEEP_HORMONE]
 cat("保留激素：", paste(unique(deg$Hormone), collapse = ", "), "\n")
 
-## ---------- 5. 筛选目标基因 ----------
 sub <- deg[get(col_gene) %in% target_genes]
 if (nrow(sub) == 0) stop("目标基因在 DEG 表中未匹配到，请检查基因 ID")
 cat("筛选后行数：", nrow(sub), "\n")
 
-## ---------- 6. 长表 -> 宽表：行为基因，列为 细胞类型_激素 ----------
 sub[, combo := paste(get(col_cell), Hormone, sep = "|")]
 
 wide <- dcast(
@@ -1148,17 +1059,15 @@ wide <- dcast(
 genes_vec <- wide[[col_gene]]
 mat <- as.matrix(wide[, -1, with = FALSE])
 rownames(mat) <- genes_vec
-## 按 M9 hub 排名排列行
+
 mat <- mat[target_genes[target_genes %in% rownames(mat)], , drop = FALSE]
 
-## ---------- 7. 顶部注释（拆回 Cell_Type / Hormone） ----------
 annot_cols <- data.table(combo = colnames(mat))
 annot_cols[, c("Cell_Type", "Hormone") := tstrsplit(combo, "\\|")]
 
 annot_col_df <- as.data.frame(annot_cols[, .(Cell_Type, Hormone)])
 rownames(annot_col_df) <- annot_cols$combo
 
-## ---------- 8. 配色 ----------
 cell_type_colors <- c(
   "Cortex"        = "#7fd4c1",
   "Dividing Cell" = "#fcf9a8",
@@ -1184,7 +1093,6 @@ ann_colors <- list(
   Hormone   = hormone_colors[names(hormone_colors) %in% annot_col_df$Hormone]
 )
 
-## ---------- 9. 画热图 ----------
 hm_colors <- colorRampPalette(c("#3949ab", "#9fa8da", "#eeeeee", "#ef9a9a", "#b71c1c"))(100)
 
 out_pdf <- file.path(PAPER_DIR, "M9_hub_genes_hormone_heatmap.pdf")
@@ -1211,43 +1119,31 @@ dev.off()
 
 cat("热图已保存：", out_pdf, "\n")
 
-## ---------- 10. 导出筛选明细 ----------
 fwrite(sub, file.path(PAPER_DIR, "M9_hub_genes_hormone_expression.csv"))
 cat("筛选明细表已导出：", file.path(PAPER_DIR, "M9_hub_genes_hormone_expression.csv"), "\n")
 
-# 读取 Top50 Hub 基因表
-# 注意路径中只有一个 hdWGCNA_Hormones5_CK2_Endo3_v1
 top50 <- read.csv("/data01/liuxy/Project/CK2_added_v3_Results/hdWGCNA_Hormones5_CK2_Endo3_v1/Hormones5_Endo3_v1_module_Top50_kME.csv")
 
-# 筛选 M9 (HormoneProgram09) 
 m9_top50 <- top50[top50$Program == "HormoneProgram09", ]
 print(m9_top50, row.names = FALSE)
-##
+
 mods <- read.csv("/data01/liuxy/Project/CK2_added_v3_Results/hdWGCNA_Hormones5_CK2_Endo3_v1/Hormones5_Endo3_v1_network_modules.csv")
 
 target_genes <- c("Glyma.11G179600", "Glyma.16G103500")
 result <- mods[mods$gene_name %in% target_genes, c("gene_name", "module", "original_module", "color")]
 
 print(result, row.names = FALSE)
-# -*- coding: UTF-8 -*-
-# 独立完整绘图脚本：六处理拟时山峦图 + 同轴分组热图 + 对应缓存GO。
-# source('soybean_endodermis_sixgroup_ridges_v6.txt', encoding='UTF-8')
-# 只需R自带包；读取v3/v5已保存CSV。不读取Seurat，不重新降维/拟时/聚类/GO。
-# 上方六条密度：CK、ABA、eBL、IAA、MeJA、SA（每组内有效生物学重复等权）。
-# 下方按处理分成六块热图；每块沿用原模块、行顺序、row Z-score。
-# 同组/同路径模块的GO才可列在旁边；缺少或无显著GO会明确注明。
-# 不将不同处理的独立模块当作一套共同基因，不将不同分量/路径混为一条时间轴。
 
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
-CACHE_VERSION <- 'auto' # auto:存在非空v5模块表则用v5，否则v3；也可显式'v5'或'v3'
-SELECT_PATHS <- NULL    # NULL:绘制全部已保存路径；或c('C01_P01')
+CACHE_VERSION <- 'auto' 
+SELECT_PATHS <- NULL    
 HEATMAP_GROUPS <- c('CK','ABA','eBL','IAA','MeJA','SA')
 GROUP_ORDER <- c('CK','ABA','eBL','IAA','MeJA','SA')
 GROUP_COLORS <- c(CK='#4D4D4D',ABA='#D55E00',eBL='#009E73',IAA='#0072B2',MeJA='#CC79A7',SA='#E69F00')
-MAX_ROWS_PER_GROUP <- 150L # 仅压缩绘图行数，原矩阵、模块和GO统计完全不改
+MAX_ROWS_PER_GROUP <- 150L 
 MIN_CELLS_PER_REPLICATE_KDE <- 3L
 KDE_GRID <- 512L
-BANDWIDTH <- NULL       # NULL:每条路径统一带宽，六组共用；不要各组单独调带宽
+BANDWIDTH <- NULL       
 DRAW_REPLICATE_LINES <- TRUE
 GO_FDR <- 0.05
 GO_TERMS_PER_MODULE <- 2L
@@ -1264,8 +1160,6 @@ read_csv_safe <- function(f,required=TRUE) {
 }
 integral_trap <- function(x,y)sum(diff(x)*(head(y,-1)+tail(y,-1))/2)
 
-# 对有限支持区间做反射KDE，减少边界处的密度流失，再归一化到面积1。
-# 不改变拟时序；所有组/重复共用同一带宽和网格，峰高可在这张图内比较。
 reflected_kde <- function(pt,limits,bw,n=KDE_GRID) {
   if(length(pt)<MIN_CELLS_PER_REPLICATE_KDE||length(unique(pt))<2L)return(NULL)
   xx<-seq(limits[1],limits[2],length.out=n)
@@ -1345,7 +1239,7 @@ draw_ridges <- function(den,limits,title_text,show_axis=TRUE) {
   base<-setNames(rev(seq_along(GROUP_ORDER)),GROUP_ORDER)
   axis(2,at=base,labels=names(base),las=1,tick=FALSE,cex.axis=.9)
   if(show_axis) {axis(1,cex.axis=.8);mtext('Saved local pseudotime',side=1,line=1.8,cex=.85)}
-  # 所有山峦共享一个密度高度系数，绝不分别归一到同样峰高。
+  
   maximum<-if(nrow(den$mean))max(den$mean$density) else 1
   if(DRAW_REPLICATE_LINES&&nrow(den$replicates))maximum<-max(maximum,den$replicates$density)
   for(tg in GROUP_ORDER) {
@@ -1380,7 +1274,7 @@ draw_heatmap <- function(h,tg,path,limits,last=FALSE) {
     nr<-nrow(h$z);nc<-ncol(h$z)
     plot(NA,xlim=limits,ylim=c(0,nr),axes=FALSE,xlab='',ylab='',
          main=paste0(tg,' | ',path,' | ',nr,' displayed / ',h$n_saved,' cached genes'),cex.main=.85)
-    # 按实际拟时坐标放置各列，不把稀疏/不等间距箱误画成等时间宽度。
+    
     edges<-c(h$pt[1],(head(h$pt,-1)+tail(h$pt,-1))/2,tail(h$pt,1))
     if(min(edges)<limits[1]-1e-6||max(edges)>limits[2]+1e-6)stop('Heatmap exceeds path pseudotime support.')
     pal<-colorRampPalette(c('#5B8E3E','#F7F7F7','#B12A90'))(201)
@@ -1478,7 +1372,7 @@ main_ridges <- function() {
       if(nrow(den$mean))write.csv(den$mean,paste0(stem,'_density_curves.csv'),row.names=FALSE)
       if(nrow(den$replicates))write.csv(den$replicates,paste0(stem,'_replicate_curves.csv'),row.names=FALSE)
       hs<-setNames(lapply(HEATMAP_GROUPS,function(tg)load_heatmap(root,folder,tg,path)),HEATMAP_GROUPS)
-      # v5有模块表但该组没有通过筛选时，不自动偷换成v3旧模块。
+      
       if(ver=='v5')for(tg in names(hs)) {
         if(!any(v5mod$treatment==tg & v5mod$path==path))hs[[tg]]<-list(ok=FALSE,reason='No supported v5 module for this group/path.')
       }
@@ -1540,16 +1434,6 @@ main_ridges <- function() {
 
 main_ridges()
 
-
-
-# -*- coding: UTF-8 -*-
-# v4_dotplot：GO改为气泡点图版本，其余逻辑和原版v4完全一致
-# 运行：source('soybean_endodermis_resume_GO_replot_v4_dotplot.txt', encoding='UTF-8')
-# 或：Rscript soybean_endodermis_resume_GO_replot_v4_dotplot.txt
-# 改动点：draw_go() 从geom_col条形图 → 气泡dot plot（size=Count，color=-log10(FDR)）
-# 不读原始Seurat对象，不重新降维/聚类/建图/定根/graph_test/平滑/聚类模块。
-# 原输出目录不变，重绘覆盖同名图，已保存的CDS/CSV分析输入不改。
-
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
 REDRAW_TRAJECTORY <- TRUE
 REDRAW_HEATMAPS <- TRUE
@@ -1560,29 +1444,25 @@ KEYTYPE_OVERRIDE <- 'GID'
 PREFERRED_DB_VERSION <- 'v4'
 ORGDB_SEARCH_DIR <- '/home/liuxy'
 ORGDB_TARBALL <- NULL
-GENE_ID_MAP_TSV <- NULL                 # 可选：feature_id、GID两列正式一对一映射
+GENE_ID_MAP_TSV <- NULL                 
 MIN_DB_MATCH_RATE <- 0.50
-MIN_DETECTED_FRACTION <- 0.10           # 与v3一致，用于恢复各路径的GO检测背景
+MIN_DETECTED_FRACTION <- 0.10           
 GO_MIN_GENES <- 5L
 GO_MIN_SET_SIZE <- 10L
 GO_MAX_SET_SIZE <- 500L
-GO_FDR_CUTOFF <- 0.05                   # 不为出图而放宽显著性阈值
+GO_FDR_CUTOFF <- 0.05                   
 GO_TOP_TERMS <- 6L
-PT_PALETTE <- 'plasma'                 # 紫→红橙→黄，替换不明显的单一蓝色
-PT_COLOR_TRANSFORM <- 'sqrt'           # 只改变颜色映射，拟时序数值不改；图例标原始值
-# 所有处理使用同一全局色标，绝不按每组各自归一化。另存linear线性色标版本作对照。
+PT_PALETTE <- 'plasma'                 
+PT_COLOR_TRANSFORM <- 'sqrt'           
+
 POINT_SIZE <- 0.55
 BACKGROUND_ALPHA <- 0.30
 SEED <- 20261119L
 
-# __ID_HELPERS__
-
-# 可测试的包加载分支：已加载 > 已安装 > 从本地tar.gz安装。
 orgdb_load_route <- function(is_loaded,is_available) {
   if(is_loaded) 'reuse_loaded_namespace' else if(is_available) 'load_installed_package' else 'install_local_package'
 }
 
-# 从已保存的counts与graph_test恢复相同的检测背景；不重新做graph_test。
 restore_universe <- function(count_matrix,cell_ids,tested_features,min_fraction=0.10) {
   if(!length(cell_ids)||anyDuplicated(cell_ids)) stop('路径细胞列表为空或含重复barcode。')
   if(!all(cell_ids %in% colnames(count_matrix))) stop('保存的路径细胞不全在CDS中，拒绝混用运行结果。')
@@ -1666,7 +1546,6 @@ main_resume <- function() {
                                                                              barwidth=grid::unit(4,'mm')))
   }
   
-  # ==================== 1. 仅用已保存坐标与拟时序重绘 ====================
   if(REDRAW_TRAJECTORY) run_stage('trajectory_replot',function() {
     finite <- d$pt_plot[is.finite(d$pt_plot)]
     if(!length(finite)||min(finite)<0) stop('主拟时序为空或存在负值。')
@@ -1694,7 +1573,7 @@ main_resume <- function() {
     save_plot(p+facet_wrap(~treatment,ncol=1,drop=FALSE),'A_pseudotime_vertical',8,22)
     save_plot(make_a('identity')+facet_wrap(~treatment,ncol=3,drop=FALSE),
               'A_pseudotime_6groups_plasma_linear',14,9)
-    # 每个处理单独保存，所有图仍使用同一坐标范围与同一色标。
+    
     for(tg in groups) {
       z<-d[d$treatment==tg,,drop=FALSE]
       ee<-edges[edges$component %in% unique(z$component),,drop=FALSE]
@@ -1724,7 +1603,6 @@ main_resume <- function() {
     }
   })
   
-  # ==================== 2. 从Z-score矩阵重绘，不再平滑或聚类 ====================
   modules <- read_table('29_group_path_gene_modules.csv',required=FALSE)
   if(REDRAW_HEATMAPS) run_stage('heatmap_replot',function() {
     need('pheatmap')
@@ -1746,7 +1624,7 @@ main_resume <- function() {
         if(any(diff(axis$local_pseudotime)<=0)) stop('热图列轴不是递增拟时序。')
         mods<-as.character(ztab$module);lev<-unique(mods)
         gaps<-head(cumsum(rle(mods)$lengths),-1L)
-        # 行与列直接沿用保存的聚类顺序；只更新注释与色板。
+        
         z[]<-pmax(-2.5,pmin(2.5,z));colnames(z)<-sprintf('PT%03d',seq_len(ncol(z)))
         annrow<-data.frame(Module=factor(mods,levels=lev),row.names=rownames(z))
         anncol<-data.frame(Treatment=factor(rep(tg,ncol(z)),levels=groups),
@@ -1798,7 +1676,6 @@ main_resume <- function() {
     }
   })
   
-  # ==================== 3. 修复OrgDb加载，补做此前未执行的GO ====================
   if(RESUME_GO) run_stage('GO_resume',function() {
     need(c('AnnotationDbi','clusterProfiler','GO.db','monocle3','SummarizedExperiment','Matrix'))
     if(is.null(modules)||!nrow(modules)) stop('没有保存的29_group_path_gene_modules.csv，不能凭空生成GO模块。')
@@ -1823,7 +1700,7 @@ main_resume <- function() {
       .libPaths(unique(c(lib,.libPaths())))
       if(!requireNamespace(ORGDB_PACKAGE,quietly=TRUE)) stop('本地OrgDb安装后仍无法加载。')
     }
-    # 已加载包直接复用，其命名空间路径才是实际生效的包路径。
+    
     ns<-asNamespace(ORGDB_PACKAGE);db<-get(ORGDB_PACKAGE,envir=ns)
     if(!methods::is(db,'OrgDb')) stop('同名对象不是OrgDb。')
     if(!KEYTYPE_OVERRIDE %in% AnnotationDbi::keytypes(db)) stop('该OrgDb没有GID键类型。')
@@ -1874,7 +1751,7 @@ main_resume <- function() {
       if(!all(d$treatment[match(cell_ids,d$cell)]==tg)) stop('路径细胞混入其他处理：',job)
       universe_features<-restore_universe(counts,cell_ids,tested,MIN_DETECTED_FRACTION)
       background<-map_ids(universe_features)
-      # 用长度一致的向量写空表，避免零匹配时data.frame报“行数不一致”。
+      
       csv(data.frame(GID=background),file.path('C_GO',tg,paste0('GO_',tg,'_',pa,'_input_universe')))
       job_modules<-modules[modules$job==job,,drop=FALSE]
       for(mm in unique(job_modules$module)) {
@@ -1893,7 +1770,7 @@ main_resume <- function() {
         if(inherits(eg,'error')) {
           ar$status<-'enrichment_error';ar$detail<-conditionMessage(eg);audit_rows[[key]]<-ar;next
         }
-        # 保存完整检验表，避免as.data.frame按对象内阈值再次隐藏行。
+        
         rr<-if(is.null(eg))data.frame() else eg@result
         ar$status<-if(nrow(rr))'tested' else 'no_testable_GO_terms';ar$n_tested_terms<-nrow(rr)
         audit_rows[[key]]<-ar
@@ -1925,7 +1802,6 @@ main_resume <- function() {
     }
     csv(final_audit,'37_GO_group_path_module_audit')
     
-    # ========== 这里是【修改后的气泡绘图函数】，替换原来geom_col条形图 ==========
     draw_go<-function(z,tg,pa,title_suffix='',exploratory=FALSE) {
       top<-do.call(rbind,lapply(split(z,z$module),function(x)
         head(x[order(x$FDR_across_all_group_modules,x$pvalue,-x$Count),,drop=FALSE],GO_TOP_TERMS)))
@@ -1945,7 +1821,6 @@ main_resume <- function() {
                paste('Global FDR <',GO_FDR_CUTOFF,'| soybean GID'),
              x='Mapped gene count',y=NULL)
     }
-    # ==========================================================================
     
     for(tg in groups) {
       group_go<-allgo[allgo$treatment==tg,,drop=FALSE]
@@ -1964,7 +1839,7 @@ main_resume <- function() {
           aa<-final_audit[final_audit$job==job,,drop=FALSE]
           reason<-paste('No significant GO BP result. Module status:',paste(unique(aa$status),collapse='; '))
           placeholder(paste(tg,'|',pa,'| GO BP'),reason,stem)
-          # 若真实检验完成但不显著，可另外看明确标注“未达显著”的描述性排序图。
+          
           if(nrow(jj)) save_plot(draw_go(jj,tg,pa,exploratory=TRUE),paste0(stem,'_top_tested_NOT_SIGNIFICANT'),
                                  12,max(6,.48*sum(pmin(table(jj$module),GO_TOP_TERMS))+1.3*length(unique(jj$module))))
         }
@@ -2005,89 +1880,52 @@ main_resume <- function() {
   invisible(run_dir)
 }
 
-# main_resume() # Explicit invocation only after choosing the matching saved run.
-# 下面为从头开始
-
-##激素拟时
-# -*- coding: UTF-8 -*-
-# 大豆：5天苗，处理24小时；CK + ABA/eBL/IAA/MeJA/SA；每组2个生物学重复。
-# 运行：Rscript soybean_endodermis_monocle3_grouped_v3.txt
-# v3：直接复制原Seurat UMAP坐标，不重新PCA/UMAP；每组单独计算平滑聚类热图和模块GO。
-# 每幅热图/GO及表格注明Treatment、Component、Path、Module；没有结果也输出组名与原因。
-# 修复：按提供的日志明确使用完整注释cell_type，不自动优先使用稀疏的new_cell_type。
-# 日志中cell_type有7473个Endodermis（全部处理）；六组筛选后的数量以本次输出为准。
-# 可在R控制台运行 source('soybean_endodermis_monocle3_grouped_v3.txt', encoding='UTF-8')。
-# 如果控制台处于Browse[1]>，先输入Q退出错误调试，再source整个新文件。
-# 这里只读取输入RDS，不覆盖它。输出保存到独立目录。
-# 图A：六组共同建图，固定坐标与色标，按处理分面；不强行生成Y形。
-# 初次没有早期细胞证据时使用探索性起点；P1/P2/P3不是已验证的分化状态。
-# 处理24小时不是拟时序24小时；CK也不是自动的早期细胞。
-# 同一时间采样的处理效应可能影响轨迹，需结合大豆标记与重复验证。
-# 依赖安装（请在服务器匹配的R/Bioconductor环境中预先完成，不固定旧版Bioc）：
-# install.packages(c('Seurat','ggplot2','igraph','pheatmap','remotes','BiocManager'))
-# BiocManager::install(c('SingleCellExperiment','SummarizedExperiment',
-#                       'AnnotationDbi','clusterProfiler','GO.db'))
-# monocle3安装依赖与安装方法：https://cole-trapnell-lab.github.io/monocle3/docs/installation/
-# remotes::install_github('cole-trapnell-lab/monocle3', upgrade='never')
-
-# ========================== 1. 参数区 ==========================
 INPUT_RDS <- '/data01/liuxy/Project/CK2_added_v3_Results/seurat_obj_with_CK2_v3.rds'
 OUT_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3'
-ASSAY <- 'RNA'                         # 必须为原始counts，不能用integrated表达值
-TREATMENT_COL <- 'treatment'            # 根据本次运行日志确定
-CELLTYPE_COL <- 'cell_type'             # 根据日志采用覆盖完整对象的注释列
-ENDODERMIS_VALUES <- c('Endodermis')     # 根据日志中的精确标签；不混入其他类型
-# 不按new/merged等列名判断最终注释，也不自动混合不同注释列。
-# new_cell_type/merged_cell_type在日志中各有192718个NA，仅625个Endodermis。
-# 当前分析使用cell_type的注释定义；若以后核实其他列才是最终完整注释，可在这里更改。
-# 设CELLTYPE_COL <- NULL恢复严格自动识别；候选不一致时停止而不猜测。
-# 如果自动匹配不合适，填写精确标签，例如 c('Endodermis','Endodermis_1')。
-SAMPLE_COL <- NULL                      # 自动识别明确的两重复样本列；也可手动填写 'sample_id'
-# 仅在每组恰好两个样本且候选划分无歧义时自动识别；仍须核对样本审计表。
-# 若SAMPLE_COL只有1/2且各处理重复使用，代码会以 treatment::sample 组合为样本ID。
-# 必须确认这两项确实是生物学重复，而不是测序lane、技术重复或处理标签。
+ASSAY <- 'RNA'                         
+TREATMENT_COL <- 'treatment'            
+CELLTYPE_COL <- 'cell_type'             
+ENDODERMIS_VALUES <- c('Endodermis')     
+
+SAMPLE_COL <- NULL                      
+
 EXPECTED_REPLICATES <- 2L
 SEED <- 20261119L
 CORES <- 4L
 MIN_GENE_CELLS <- 10L
-SEURAT_REDUCTION <- 'umap'              # 原RDS的UMAP；若实际叫umap.integrated，请修改此处
-# 本版没有重新降维的备用分支。缺少指定坐标时停止，列出可用reduction供选择。
-# 默认不回归treatment，不按处理分别建图，也不强制连接不相连的partition。
-# 已确认有技术批次时，可另行制定批次校正方案；不能把处理差异直接当作批次去掉。
+SEURAT_REDUCTION <- 'umap'              
 
-# 起点优先级：ROOT_NODES > ROOT_CELL_IDS > ROOT_STATE_COL/VALUES > 探索性端点。
-ROOT_NODES <- character(0)              # 如 c('Y_35')，从本次诊断图读取真实节点ID
-ROOT_CELL_IDS <- character(0)           # 已知早期细胞barcode，按最多细胞投影的节点定根
-ROOT_STATE_COL <- NULL                  # 已有早期/成熟状态注释列
-ROOT_STATE_VALUES <- character(0)       # 如 c('early_endodermis')，必须确有依据
-ROOT_BIOLOGICALLY_VALIDATED <- FALSE     # 只有经标记/注释验证后才能改TRUE
-TARGET_COMPONENT <- NULL                # NULL=细胞最多的连通分量；编号见诊断表
-# 多个不相连分量没有可直接比较的拟时尺度。默认只给一个分量定根，其余标灰并统计。
-EXTRA_COMPONENT_ROOTS <- character(0)    # 可为其他分量各指定一个真实节点ID；否则用探索性端点
-# 主图A与状态比较仍用共同主分量；扩展对其他分量另定局部起点，局部拟时序不可跨分量比较。
-STAGE_REFERENCE <- 'CK'                 # 在同一有根分量中，以CK的1/3、2/3分位数定界
+ROOT_NODES <- character(0)              
+ROOT_CELL_IDS <- character(0)           
+ROOT_STATE_COL <- NULL                  
+ROOT_STATE_VALUES <- character(0)       
+ROOT_BIOLOGICALLY_VALIDATED <- FALSE     
+TARGET_COMPONENT <- NULL                
+
+EXTRA_COMPONENT_ROOTS <- character(0)    
+
+STAGE_REFERENCE <- 'CK'                 
 POINT_SIZE <- 0.35
-PLOT_MAX_PER_GROUP <- Inf               # 默认画所有细胞；只影响绘图，不影响计算与比例
-MARKER_GENES <- character(0)            # 填大豆表达矩阵中的确切基因ID用于趋势图
+PLOT_MAX_PER_GROUP <- Inf               
+MARKER_GENES <- character(0)            
 
-# 扩展：共同图候选基因；各处理内分别计算起点到末端路径热图和对应模块GO BP。
-RUN_GENE_ANALYSIS <- TRUE               # 较慢；先看图A可设FALSE
+RUN_GENE_ANALYSIS <- TRUE               
 GRAPH_Q_CUTOFF <- 0.01
 GRAPH_MORAN_CUTOFF <- 0.10
-MAX_HEATMAP_GENES <- 180L               # 每张热图最多180个有清晰动态模式的基因
+MAX_HEATMAP_GENES <- 180L               
 HEATMAP_MODULES <- 3L
 N_PSEUDOTIME_BINS <- 30L
-MIN_PATH_CELLS <- 80L                   # 每个处理在一条路径上的最少细胞
-MIN_CELLS_PER_BIN <- 8L                 # 分位数分箱，避免稀疏末端单细胞形成红条
+MIN_PATH_CELLS <- 80L                   
+MIN_CELLS_PER_BIN <- 8L                 
 MIN_BINS <- 6L
 MIN_CELLS_PER_SAMPLE_BIN <- 3L
-SMOOTH_DF <- 4                         # 低自由度样条，用于展示趋势，不当作显著性检验
+SMOOTH_DF <- 4                         
 HEATMAP_GRID_POINTS <- 80L
 MIN_DETECTED_FRACTION <- 0.10
-MIN_SMOOTH_AMPLITUDE <- 0.15             # log1p归一化表达的平滑趋势振幅
-MIN_TREND_R2 <- 0.15                    # 相对于分箱均值的描述性拟合优度
-MAX_BIN_GAP_FRACTION <- 0.40             # 大段没有细胞支持时跳过，不用平滑填满
-MAX_PATHS_PER_GROUP <- 3L               # 每组按细胞数最多的3条合格路径；Inf=全部
+MIN_SMOOTH_AMPLITUDE <- 0.15             
+MIN_TREND_R2 <- 0.15                    
+MAX_BIN_GAP_FRACTION <- 0.40             
+MAX_PATHS_PER_GROUP <- 3L               
 GO_TOP_TERMS_PER_MODULE <- 6L
 GO_FDR_CUTOFF <- 0.05
 RUN_GO <- TRUE
@@ -2095,16 +1933,11 @@ ORGDB_PACKAGE <- 'org.G.max.eg.db'
 KEYTYPE_OVERRIDE <- 'GID'
 PREFERRED_DB_VERSION <- 'v4'
 ORGDB_SEARCH_DIR <- '/home/liuxy'
-ORGDB_TARBALL <- NULL                   # 可指定 '/home/liuxy/org.G.max.eg.db_1.44.0.tar.gz'
-# PREFERRED_DB_VERSION用于基因ID版本标记清理和数据库记录优选，不是R包版本。
-# 如Glyma.01G000100.v4、Glyma.01G000100_v4先提取基础ID并保留v4标签。
-# 同一基础ID优先数据库v4，其次无版本的唯一GID；其他版本或多义匹配明确记录。
-# 默认表达矩阵已有非v4版本标签的基因不自动跨版本转换；正式映射表可覆盖此限制。
-# counts行名保持原样；清理仅用于注释/GO匹配，传给enrichGO的是数据库原始GID。
-GENE_ID_MAP_TSV <- NULL                 # 可选两列：feature_id、GID；严格一对一映射
-MIN_DB_MATCH_RATE <- 0.50               # 低于此阈值停止GO扩展，不影响已保存的图A
+ORGDB_TARBALL <- NULL                   
 
-# 只识别明确的大豆Glyma基础ID及常见后缀，避免gsub删除生物学ID本身。
+GENE_ID_MAP_TSV <- NULL                 
+MIN_DB_MATCH_RATE <- 0.50               
+
 parse_soybean_id <- function(ids) {
   raw <- as.character(ids)
   s <- trimws(raw)
@@ -2114,7 +1947,7 @@ parse_soybean_id <- function(ids) {
   base <- s; suffix <- rep('',length(s)); ver <- rep(NA_character_,length(s))
   base[valid] <- sub(pattern,'Glyma.\\2G\\3',s[valid],ignore.case=TRUE)
   suffix[valid] <- sub(pattern,'\\4',s[valid],ignore.case=TRUE)
-  # 后缀中独立的v数字是版本；.1等纯数字后缀仅作为转录本后缀清理。
+  
   vv <- regexpr('(^|[._-])v[0-9]+(?=$|[._-])',suffix,perl=TRUE,ignore.case=TRUE)
   has <- which(vv>0)
   if(length(has)) {
@@ -2122,7 +1955,7 @@ parse_soybean_id <- function(ids) {
     ver[has] <- tolower(sub('^[._-]','',hit))
   }
   tail_without_version <- gsub('(^|[._-])v[0-9]+(?=$|[._-])','',suffix,perl=TRUE,ignore.case=TRUE)
-  # 允许空后缀、.1/.1.2、.t1/.p1；其他后缀保留原文以避免错误合并。
+  
   safe_tail <- grepl('^([._-]([0-9]+|[tTpP][0-9]+))*$',tail_without_version)
   canonical <- ifelse(valid & safe_tail,base,s)
   data.frame(raw_id=raw,clean_id=canonical,version=ver,
@@ -2139,7 +1972,7 @@ match_soybean_gid <- function(features,dbkeys,preferred='v4') {
                     GID=NA_character_,db_version=NA_character_,match_status='unmatched',
                     n_db_candidates=0L,stringsAsFactors=FALSE)
   for(i in seq_len(nrow(f))) {
-    # 有明确非首选版本时不伪装成v4。用户可提供真实跨版本映射覆盖。
+    
     if(!is.na(f$version[i]) && f$version[i]!=preferred) {
       out$match_status[i] <- 'source_nonpreferred_version_requires_mapping';next
     }
@@ -2150,7 +1983,7 @@ match_soybean_gid <- function(features,dbkeys,preferred='v4') {
     if(min(b$priority[ii])==3L) {
       out$match_status[i] <- 'db_only_nonpreferred_version';next
     }
-    # 同优先级有多个转录本时不随便选第一条；若原始精确匹配存在则采用它。
+    
     exact <- best[b$raw_id[best]==f$raw_id[i]]
     if(length(exact)==1) best <- exact
     if(length(best)!=1) {out$match_status[i]<-'ambiguous_same_priority';next}
@@ -2161,7 +1994,6 @@ match_soybean_gid <- function(features,dbkeys,preferred='v4') {
   out
 }
 
-# 在任何细胞筛选之前，对照全部注释候选的覆盖率和六组Endodermis计数。
 audit_celltype_columns <- function(md,treatment,groups,match_endodermis) {
   text_columns <- names(md)[vapply(md,function(x)is.character(x)||is.factor(x),logical(1))]
   candidates <- text_columns[vapply(md[text_columns],function(x)any(match_endodermis(x)),logical(1)) |
@@ -2184,12 +2016,11 @@ audit_celltype_columns <- function(md,treatment,groups,match_endodermis) {
   do.call(rbind,result)
 }
 
-# 平滑趋势与聚类是展示步骤，不生成伪装成生物学重复检验的p值。
 make_smooth_heatmap <- function(expression,pseudotime,samples=NULL) {
   stopifnot(ncol(expression)==length(pseudotime),!is.null(rownames(expression)))
   if(any(!is.finite(pseudotime))) stop('Non-finite local pseudotime.')
   if(length(unique(pseudotime))<MIN_BINS+1L) stop('Too few distinct pseudotime values.')
-  # 等数量分箱避免旧版稀疏末端由单个高表达细胞主导。
+  
   nb <- min(N_PSEUDOTIME_BINS,floor(length(pseudotime)/MIN_CELLS_PER_BIN))
   if(nb<MIN_BINS) stop('Too few cells for adequately populated bins.')
   br <- unique(as.numeric(quantile(pseudotime,seq(0,1,length.out=nb+1L),type=7)))
@@ -2205,7 +2036,7 @@ make_smooth_heatmap <- function(expression,pseudotime,samples=NULL) {
       chunks <- split(ii,as.character(samples[ii]))
       chunks <- chunks[lengths(chunks)>=MIN_CELLS_PER_SAMPLE_BIN]
       if(!length(chunks)) next
-      # 先算每个重复的均值，再对可用重复等权平均，避免细胞数多的重复占优。
+      
       by_rep <- vapply(chunks,function(jj)rowMeans(expression[,jj,drop=FALSE]),numeric(nrow(expression)))
       by_rep <- matrix(by_rep,nrow=nrow(expression))
       value <- rowMeans(by_rep);nrep <- length(chunks);used <- unlist(chunks,use.names=FALSE)
@@ -2243,7 +2074,7 @@ make_smooth_heatmap <- function(expression,pseudotime,samples=NULL) {
   sm <- smooth_mat[selected,,drop=FALSE]
   z <- t(scale(t(sm)))
   if(any(!is.finite(z))) stop('Non-finite row-scaled trend matrix.')
-  # Ward聚类等价于按标准化曲线的整体形状分组；聚类在截断色阶之前进行。
+  
   hc <- hclust(dist(z),method='ward.D2');k<-min(HEATMAP_MODULES,nrow(z)-1L)
   raw_module <- cutree(hc,k=k)
   centers <- do.call(rbind,lapply(sort(unique(raw_module)),function(m)colMeans(z[raw_module==m,,drop=FALSE])))
@@ -2251,7 +2082,7 @@ make_smooth_heatmap <- function(expression,pseudotime,samples=NULL) {
   cluster_order <- order(peak,seq_along(peak))
   remap <- setNames(paste0('M',seq_len(k)),sort(unique(raw_module))[cluster_order])
   modules <- unname(remap[as.character(raw_module)]);names(modules)<-rownames(z)
-  # 模块按平均峰值从早到晚排列；模块内部仍用层次聚类，不随机排序。
+  
   ord <- unlist(lapply(paste0('M',seq_len(k)),function(m) {
     ids <- names(modules)[modules==m]
     if(length(ids)<2L) return(ids)
@@ -2311,7 +2142,6 @@ main <- function() {
     !is.na(x) & grepl('endodermis|endodermal|内皮层',as.character(x),ignore.case=TRUE)
   }
   
-  # ==================== 2. 读RDS、检查metadata、筛选 ====================
   if(!file.exists(INPUT_RDS)) stop('找不到输入RDS：',INPUT_RDS)
   cat('Reading RDS: ',INPUT_RDS,'\n',sep='')
   obj <- readRDS(INPUT_RDS)
@@ -2357,7 +2187,7 @@ main <- function() {
   csv(audit,'01_all_cell_treatment_audit'); print(audit)
   cat('Selected ',sum(!is.na(tr)),' cells in six treatment groups; excluded ',sum(is.na(tr)),'.\n',sep='')
   csv(as.data.frame(table(annotation=as.character(md[[ec]]),useNA='ifany')),'02_annotation_counts')
-  # 保留完整注释与局部新注释的差异，方便判断是否存在后续需要人工核对的重注释。
+  
   for(other in setdiff(intersect(c('cell_type','new_cell_type','merged_cell_type'),names(md)),ec)) {
     cross <- as.data.frame(table(selected_annotation=as.character(md[[ec]])[!is.na(tr)],
                                  alternative_annotation=as.character(md[[other]])[!is.na(tr)],useNA='ifany'))
@@ -2389,7 +2219,7 @@ main <- function() {
       !anyNA(x) && all(nzchar(trimws(x))) &&
         all(vapply(split(x,md$analysis_treatment),function(z)length(unique(z))==EXPECTED_REPLICATES,logical(1)))
     },logical(1))]
-    # 不同列只有命名不同但同一批细胞分组相同，也视作相同样本划分。
+    
     canonical_groups <- lapply(viable,function(nm) {
       x <- paste(md$analysis_treatment,md[[nm]],sep='::');match(x,unique(x))
     })
@@ -2408,7 +2238,7 @@ main <- function() {
     md$analysis_sample <- NA_character_
     cat('SAMPLE_COL未指定：会生成合并组描述图；设置真实生物学样本列后重跑获得两个重复的结果。\n')
   }
-  # 先取子集再合并counts层，避免对全部20万细胞创建稠密矩阵。
+  
   if(!ASSAY %in% names(obj@assays)) stop('找不到assay：',ASSAY)
   if(!SEURAT_REDUCTION %in% names(obj@reductions)) stop('缺少指定的原始UMAP：',SEURAT_REDUCTION,
                                                         '；可用reduction：',paste(names(obj@reductions),collapse=', '),'。本版不会重新降维。')
@@ -2444,7 +2274,6 @@ main <- function() {
   rm(original_umap)
   rm(obj); gc()
   
-  # ========================== 3. 六组共同轨迹 ==========================
   gene_md <- data.frame(gene_short_name=rownames(counts),row.names=rownames(counts))
   cds <- monocle3::new_cell_data_set(counts,cell_metadata=md,gene_metadata=gene_md)
   cds <- monocle3::estimate_size_factors(cds)
@@ -2459,7 +2288,7 @@ main <- function() {
   saveRDS(cds,file.path(run_dir,'cds_before_root.rds'))
   g <- monocle3::principal_graph(cds)[['UMAP']]
   vn <- igraph::V(g)$name
-  # Monocle3目前将主图坐标与最近节点保存在principal_graph_aux中。
+  
   aux <- cds@principal_graph_aux[['UMAP']]
   xy <- t(aux$dp_mst)
   if(is.null(rownames(xy)) || !all(vn %in% rownames(xy))) stop('主图坐标与节点ID不匹配。')
@@ -2500,7 +2329,6 @@ main <- function() {
   csv(nodes,'08_principal_nodes'); csv(edges,'09_graph_edges')
   csv(as.data.frame(table(treatment=d$treatment,component=d$component)),'10_component_counts')
   
-  # ========================== 4. 起点与拟时序 ==========================
   target <- if(is.null(TARGET_COMPONENT)) as.integer(names(which.max(table(d$component)))) else
     as.integer(TARGET_COMPONENT)
   if(!target %in% d$component) stop('TARGET_COMPONENT不存在。')
@@ -2528,7 +2356,7 @@ main <- function() {
   } else {
     pool <- nodes[nodes$component==target & nodes$degree==1,,drop=FALSE]
     if(!nrow(pool)) pool <- nodes[nodes$component==target,,drop=FALSE]
-    # 仅为让初次运行能完整展示；该端点没有早期/成熟生物学含义。
+    
     pool <- pool[order(-pool$n_cells,pool$node),,drop=FALSE]; chosen <- pool$node[1]
   }
   validated <- ROOT_BIOLOGICALLY_VALIDATED && root_source!='exploratory_topological_endpoint'
@@ -2540,7 +2368,7 @@ main <- function() {
   d$finite_pseudotime <- is.finite(d$pseudotime) & d$component==target
   d$pseudotime_plot <- ifelse(d$finite_pseudotime,d$pseudotime,NA_real_)
   if(sum(d$finite_pseudotime)<30) stop('有根连通分量的有限拟时序细胞过少。')
-  # 共享阈值；禁止每组各自三等分（那会人为制造每组相同的比例）。
+  
   ref <- d$pseudotime[d$finite_pseudotime & d$treatment==STAGE_REFERENCE]
   if(length(ref)<30) stop('参考组在有根分量不足30个细胞；检查起点/连通分量。')
   cuts <- unname(quantile(ref,c(1/3,2/3),type=7))
@@ -2553,7 +2381,6 @@ main <- function() {
   csv(data.frame(root_node=chosen,source=root_source,biologically_validated=validated,
                  component=target,reference=STAGE_REFERENCE,cut_1=cuts[1],cut_2=cuts[2]),'11_root_and_interval_definition')
   
-  # 额外局部定根：为了分别展示各处理在断开分量内的动态，不改变主图的共同根拟时序。
   if(length(chosen)!=1L) stop('本版路径热图要求主分量恰好一个起点；请将ROOT_NODES限定为一个节点。')
   if(!all(EXTRA_COMPONENT_ROOTS %in% vn)) stop('EXTRA_COMPONENT_ROOTS中有不存在的节点。')
   if(anyDuplicated(unname(membership[EXTRA_COMPONENT_ROOTS]))) stop('其他每个分量只能指定一个起点。')
@@ -2578,8 +2405,6 @@ main <- function() {
   saveRDS(cds_local,file.path(run_dir,'endodermis_local_roots_separate_components.rds'))
   rm(cds_local);gc()
   
-  # 图分支段：去掉度数>=3的分叉节点后，剩余连通段；分叉节点单独标注。
-  # 这是确定性拓扑分段，不等价于Monocle2 State，更不能直接命名为细胞命运。
   junction <- nodes$node[nodes$degree>=3]
   segment_map <- setNames(rep(NA_character_,length(vn)),vn)
   if(length(junction)<length(vn)) {
@@ -2598,7 +2423,6 @@ main <- function() {
   SummarizedExperiment::colData(cds)$local_root <- d$local_root
   saveRDS(cds,file.path(run_dir,'endodermis_monocle3_ordered.rds'))
   
-  # ========================== 5. 图A与状态比例 ==========================
   plot_d <- d
   if(is.finite(PLOT_MAX_PER_GROUP)) {
     set.seed(SEED)
@@ -2607,7 +2431,7 @@ main <- function() {
     plot_d <- d[ix,,drop=FALSE]
   }
   pt_limits <- range(d$pseudotime[d$finite_pseudotime])
-  # 每个面板用浅灰细胞显示完整参考轮廓；只叠加该处理实际占据的分量的轨迹。
+  
   background_d <- d[,c('x','y')]
   edges$component <- unname(membership[edges$from])
   facet_edges <- do.call(rbind,lapply(groups,function(tg) {
@@ -2666,7 +2490,6 @@ main <- function() {
   coverage <- as.data.frame(table(treatment=d$treatment,finite=d$finite_pseudotime));names(coverage)[3]<-'n_cells'
   csv(coverage,'19_rooted_coverage_by_treatment')
   
-  # 每个生物学重复一个点；不对细胞执行Wilcoxon/卡方并充当生物学重复。
   if(!is.null(sample_col)) {
     sample_info <- unique(d[,c('sample','treatment')])
     reps <- as.data.frame(table(treatment=sample_info$treatment));names(reps)[2]<-'n_replicates'
@@ -2711,8 +2534,6 @@ main <- function() {
                'Pseudotime is not elapsed time and does not measure a differentiation rate.',orientation),
              file.path(run_dir,'INTERPRETATION.txt'))
   
-  # ==================== 6. 每组独立的路径热图与GO ====================
-  # 共同图只用于固定几何和定义路径；热图表达值、筛选、聚类、模块均在各处理内计算。
   if(RUN_GENE_ANALYSIS) tryCatch({
     if(!requireNamespace('pheatmap',quietly=TRUE)) stop('扩展需要pheatmap。')
     for(tg in groups) {
@@ -2726,7 +2547,7 @@ main <- function() {
     sig <- gt[is.finite(gt$q_value)&is.finite(gt$morans_I)&
                 gt$q_value<GRAPH_Q_CUTOFF&gt$morans_I>GRAPH_MORAN_CUTOFF,,drop=FALSE]
     sig<-sig[order(-sig$morans_I,sig$q_value),,drop=FALSE];csv(sig,'26_pooled_graph_candidate_genes')
-    # 此候选筛选不代表某激素特异DE；后续模块仅描述该处理内的拟时表达模式。
+    
     sf <- monocle3::size_factors(cds)
     if(any(!is.finite(sf)|sf<=0)) stop('无效size factors。')
     log_expr <- function(ids,ix) log1p(as.matrix(counts[ids,ix,drop=FALSE]) /
@@ -2749,7 +2570,7 @@ main <- function() {
     if(!length(paths)) stop('未得到具有至少3个主图节点的起点到末端路径。')
     csv(do.call(rbind,path_info),'26b_root_to_leaf_paths')
     csv(do.call(rbind,path_members),'26c_path_node_membership')
-    # 共用主干的细胞可出现在多条路径，但不会跨处理混用；输出成员表便于检查。
+    
     module_tables<-list();jobs<-list();manifest<-list();group_status<-list()
     save_heatmap <- function(result,tg,path,ncell,file_stem) {
       z<-result$z;z[]<-pmax(-2.5,pmin(2.5,z))
@@ -2798,7 +2619,7 @@ main <- function() {
           universe_features<-intersect(tested,detectable)
           candidates<-intersect(sig$feature_id,universe_features)
           if(length(candidates)<6L) stop('Too few expressed pooled-graph candidates in this treatment/path.')
-          # 最多1500个候选进入平滑，之后按本组的动态质量选至MAX_HEATMAP_GENES。
+          
           candidates<-head(candidates,1500L)
           ex<-log_expr(candidates,ix)
           rr<-make_smooth_heatmap(ex,d$local_pseudotime[ix],d$sample[ix])
@@ -2826,7 +2647,7 @@ main <- function() {
                                            root_node=meta$root_node,leaf_node=meta$leaf_node,module=unname(rr$modules),feature_id=names(rr$modules))
           jobs[[job]]<-list(treatment=tg,path=path,component=meta$component,universe=universe_features,
                             n_cells=length(ix),stem=stem)
-          # 附带同组、同路径的代表基因平滑曲线，与热图采用完全一致的数值。
+          
           markers<-if(length(MARKER_GENES))intersect(MARKER_GENES,rownames(rr$smooth_expression)) else
             head(rownames(rr$smooth_expression),6L)
           if(length(markers)) {
@@ -2859,14 +2680,14 @@ main <- function() {
         if(!requireNamespace(pkg,quietly=TRUE)) stop('GO扩展需要：',pkg)
       tarball <- ORGDB_TARBALL
       if(is.null(tarball)) {
-        # 只扫描指定目录，不递归扫描整个home。
+        
         search_dirs <- ORGDB_SEARCH_DIR
         candidates <- unlist(lapply(search_dirs,function(z)list.files(z,
                                                                       pattern='^org[.]G[.]max[.]eg[.]db.*[.]tar[.]gz$',full.names=TRUE)),use.names=FALSE)
         if(length(candidates)>1) stop('发现多个OrgDb安装包；请用ORGDB_TARBALL指定所需文件。')
         if(length(candidates)==1) tarball <- candidates[1]
       }
-      # 使用本次输出目录的私有R库，避免覆盖服务器原有注释包。
+      
       if(!is.null(tarball)) {
         if(!file.exists(tarball)) stop('注释包不存在：',tarball)
         lib <- file.path(run_dir,'R_library');dir.create(lib)
@@ -3012,16 +2833,6 @@ main <- function() {
 
 main()
 
-##GO
-# -*- coding: UTF-8 -*-
-# v4：从已完成的v3结果续跑GO并重绘。独立完整脚本，无需先source旧版。
-# 运行：source('soybean_endodermis_resume_GO_replot_v4.txt', encoding='UTF-8')
-# 或：Rscript soybean_endodermis_resume_GO_replot_v4.txt
-# 本次GO空目录的已知原因：v3在发现OrgDb已加载时主动stop，尚未执行富集。
-# v4优先复用已加载的同名OrgDb，不再因已加载而报错，不强制重新安装。
-# 不读原始Seurat对象，不重新降维/聚类/建图/定根/graph_test/平滑/聚类模块。
-# 原输出目录不变，无新时间戳目录；重绘覆盖同名图，已保存的CDS/CSV分析输入不改。
-
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
 REDRAW_TRAJECTORY <- TRUE
 REDRAW_HEATMAPS <- TRUE
@@ -3032,29 +2843,25 @@ KEYTYPE_OVERRIDE <- 'GID'
 PREFERRED_DB_VERSION <- 'v4'
 ORGDB_SEARCH_DIR <- '/home/liuxy'
 ORGDB_TARBALL <- NULL
-GENE_ID_MAP_TSV <- NULL                 # 可选：feature_id、GID两列正式一对一映射
+GENE_ID_MAP_TSV <- NULL                 
 MIN_DB_MATCH_RATE <- 0.50
-MIN_DETECTED_FRACTION <- 0.10           # 与v3一致，用于恢复各路径的GO检测背景
+MIN_DETECTED_FRACTION <- 0.10           
 GO_MIN_GENES <- 5L
 GO_MIN_SET_SIZE <- 10L
 GO_MAX_SET_SIZE <- 500L
-GO_FDR_CUTOFF <- 0.05                   # 不为出图而放宽显著性阈值
+GO_FDR_CUTOFF <- 0.05                   
 GO_TOP_TERMS <- 6L
-PT_PALETTE <- 'plasma'                 # 紫→红橙→黄，替换不明显的单一蓝色
-PT_COLOR_TRANSFORM <- 'sqrt'           # 只改变颜色映射，拟时序数值不改；图例标原始值
-# 所有处理使用同一全局色标，绝不按每组各自归一化。另存linear线性色标版本作对照。
+PT_PALETTE <- 'plasma'                 
+PT_COLOR_TRANSFORM <- 'sqrt'           
+
 POINT_SIZE <- 0.55
 BACKGROUND_ALPHA <- 0.30
 SEED <- 20261119L
 
-# __ID_HELPERS__
-
-# 可测试的包加载分支：已加载 > 已安装 > 从本地tar.gz安装。
 orgdb_load_route <- function(is_loaded,is_available) {
   if(is_loaded) 'reuse_loaded_namespace' else if(is_available) 'load_installed_package' else 'install_local_package'
 }
 
-# 从已保存的counts与graph_test恢复相同的检测背景；不重新做graph_test。
 restore_universe <- function(count_matrix,cell_ids,tested_features,min_fraction=0.10) {
   if(!length(cell_ids)||anyDuplicated(cell_ids)) stop('路径细胞列表为空或含重复barcode。')
   if(!all(cell_ids %in% colnames(count_matrix))) stop('保存的路径细胞不全在CDS中，拒绝混用运行结果。')
@@ -3138,7 +2945,6 @@ main_resume <- function() {
                                                                              barwidth=grid::unit(4,'mm')))
   }
   
-  # ==================== 1. 仅用已保存坐标与拟时序重绘 ====================
   if(REDRAW_TRAJECTORY) run_stage('trajectory_replot',function() {
     finite <- d$pt_plot[is.finite(d$pt_plot)]
     if(!length(finite)||min(finite)<0) stop('主拟时序为空或存在负值。')
@@ -3166,7 +2972,7 @@ main_resume <- function() {
     save_plot(p+facet_wrap(~treatment,ncol=1,drop=FALSE),'A_pseudotime_vertical',8,22)
     save_plot(make_a('identity')+facet_wrap(~treatment,ncol=3,drop=FALSE),
               'A_pseudotime_6groups_plasma_linear',14,9)
-    # 每个处理单独保存，所有图仍使用同一坐标范围与同一色标。
+    
     for(tg in groups) {
       z<-d[d$treatment==tg,,drop=FALSE]
       ee<-edges[edges$component %in% unique(z$component),,drop=FALSE]
@@ -3196,7 +3002,6 @@ main_resume <- function() {
     }
   })
   
-  # ==================== 2. 从Z-score矩阵重绘，不再平滑或聚类 ====================
   modules <- read_table('29_group_path_gene_modules.csv',required=FALSE)
   if(REDRAW_HEATMAPS) run_stage('heatmap_replot',function() {
     need('pheatmap')
@@ -3218,7 +3023,7 @@ main_resume <- function() {
         if(any(diff(axis$local_pseudotime)<=0)) stop('热图列轴不是递增拟时序。')
         mods<-as.character(ztab$module);lev<-unique(mods)
         gaps<-head(cumsum(rle(mods)$lengths),-1L)
-        # 行与列直接沿用保存的聚类顺序；只更新注释与色板。
+        
         z[]<-pmax(-2.5,pmin(2.5,z));colnames(z)<-sprintf('PT%03d',seq_len(ncol(z)))
         annrow<-data.frame(Module=factor(mods,levels=lev),row.names=rownames(z))
         anncol<-data.frame(Treatment=factor(rep(tg,ncol(z)),levels=groups),
@@ -3270,7 +3075,6 @@ main_resume <- function() {
     }
   })
   
-  # ==================== 3. 修复OrgDb加载，补做此前未执行的GO ====================
   if(RESUME_GO) run_stage('GO_resume',function() {
     need(c('AnnotationDbi','clusterProfiler','GO.db','monocle3','SummarizedExperiment','Matrix'))
     if(is.null(modules)||!nrow(modules)) stop('没有保存的29_group_path_gene_modules.csv，不能凭空生成GO模块。')
@@ -3295,7 +3099,7 @@ main_resume <- function() {
       .libPaths(unique(c(lib,.libPaths())))
       if(!requireNamespace(ORGDB_PACKAGE,quietly=TRUE)) stop('本地OrgDb安装后仍无法加载。')
     }
-    # 已加载包直接复用，其命名空间路径才是实际生效的包路径。
+    
     ns<-asNamespace(ORGDB_PACKAGE);db<-get(ORGDB_PACKAGE,envir=ns)
     if(!methods::is(db,'OrgDb')) stop('同名对象不是OrgDb。')
     if(!KEYTYPE_OVERRIDE %in% AnnotationDbi::keytypes(db)) stop('该OrgDb没有GID键类型。')
@@ -3346,7 +3150,7 @@ main_resume <- function() {
       if(!all(d$treatment[match(cell_ids,d$cell)]==tg)) stop('路径细胞混入其他处理：',job)
       universe_features<-restore_universe(counts,cell_ids,tested,MIN_DETECTED_FRACTION)
       background<-map_ids(universe_features)
-      # 用长度一致的向量写空表，避免零匹配时data.frame报“行数不一致”。
+      
       csv(data.frame(GID=background),file.path('C_GO',tg,paste0('GO_',tg,'_',pa,'_input_universe')))
       job_modules<-modules[modules$job==job,,drop=FALSE]
       for(mm in unique(job_modules$module)) {
@@ -3365,7 +3169,7 @@ main_resume <- function() {
         if(inherits(eg,'error')) {
           ar$status<-'enrichment_error';ar$detail<-conditionMessage(eg);audit_rows[[key]]<-ar;next
         }
-        # 保存完整检验表，避免as.data.frame按对象内阈值再次隐藏行。
+        
         rr<-if(is.null(eg))data.frame() else eg@result
         ar$status<-if(nrow(rr))'tested' else 'no_testable_GO_terms';ar$n_tested_terms<-nrow(rr)
         audit_rows[[key]]<-ar
@@ -3426,7 +3230,7 @@ main_resume <- function() {
           aa<-final_audit[final_audit$job==job,,drop=FALSE]
           reason<-paste('No significant GO BP result. Module status:',paste(unique(aa$status),collapse='; '))
           placeholder(paste(tg,'|',pa,'| GO BP'),reason,stem)
-          # 若真实检验完成但不显著，可另外看明确标注“未达显著”的描述性排序图。
+          
           if(nrow(jj)) save_plot(draw_go(jj,tg,pa,exploratory=TRUE),paste0(stem,'_top_tested_NOT_SIGNIFICANT'),
                                  12,max(6,.48*sum(pmin(table(jj$module),GO_TOP_TERMS))+1.3*length(unique(jj$module))))
         }
@@ -3466,59 +3270,44 @@ main_resume <- function() {
   invisible(run_dir)
 }
 
-# main_resume() # Explicit invocation only after choosing the matching saved run.
-##11.21
-# -*- coding: UTF-8 -*-
-# 大豆整根 CK + ABA + eBL + IAA + MeJA + SA：原UMAP、候选QC起点、WGCNA程序和根解剖。
-# 运行：Rscript soybean_wholeroot_hormone_QC_v8.R
-# 本脚本独立运行，不需要source旧版脚本。真实结果仅来自输入数据；截图不用于生成数值。
-# 同一时点的处理比较不能证明发育速度、细胞谱系或因果机制。
-# QC为组织者；QC邻近initials/meristem至分化细胞为待验证的状态顺序。
-# 空间径向层次 != 拟时序；CK=control，不能自动当作细胞分裂素或早期状态。
-# 依赖：Seurat, SeuratObject, Matrix, monocle3, SingleCellExperiment,
-# SummarizedExperiment, igraph。GO可选AnnotationDbi, org.G.max.eg.db, GO.db。
-# 图片可选png/jpeg。无自动安装、无强制连接partition、无重新UMAP。
-# 修改：接入已运行的 WGCNA 模块文件 Nature_network_modules.csv（gene_name/module）。
-
 INPUT_RDS <- '/data01/liuxy/Project/CK2_added_v3_Results/seurat_obj_with_CK2_v3.rds'
 RUN_DIR <- '/data01/liuxy/Project/CK2_added_v3_Results/Endodermis_monocle3_originalUMAP_grouped_v3/20261119_163425'
-# 保留原输出根目录；整根与原Endodermis对象严格分开保存。
+
 OUT_DIR <- file.path(RUN_DIR, 'WholeRoot_hormone_QC_v8')
 ASSAY <- 'RNA'
 UMAP_NAME <- 'umap'
 TREATMENT_COL <- 'treatment'
 CELLTYPE_COL <- 'cell_type'
-SAMPLE_COL <- 'orig.ident' # 必须核实为生物学重复，不是lane/处理名。
+SAMPLE_COL <- 'orig.ident' 
 GROUPS <- c('CK','ABA','eBL','IAA','MeJA','SA')
 EXPECTED_REPLICATES <- 2L
 SEED <- 20261121L
 CORES <- 4L
-REBUILD_GRAPH <- FALSE    # FALSE优先复用本v8整根缓存；输入参数/文件改变时拒绝旧缓存。
+REBUILD_GRAPH <- FALSE    
 QC_LABELS <- c('QC','Quiescent Center','Quiescent centre')
-ROOT_CELL_IDS <- character(0) # 优先：经标记验证的早期细胞barcode。
-ROOT_NODES <- character(0)    # 次优先：本次整根图节点，不得照抄Endodermis的Y_86。
+ROOT_CELL_IDS <- character(0) 
+ROOT_NODES <- character(0)    
 ROOT_BIOLOGICALLY_VALIDATED <- FALSE
 MIN_QC_CELLS_PER_COMPONENT <- 5L
 MIN_QC_SAMPLES_PER_COMPONENT <- 2L
-# 没QC/经验证root的分量保持未定向，不自动改用CK或任意Meristem节点。
+
 MIN_GENE_CELLS <- 10L
 MIN_SAMPLE_CELLS <- 20L
 MIN_CELLS_PER_BIN_SAMPLE <- 5L
 MIN_PATH_CELLS <- 150L
-MAX_PATHS <- 12L # 超过时保留细胞数最多的12条；所有路径均在审计表列出。
+MAX_PATHS <- 12L 
 N_BINS <- 24L
 PNG_DPI <- 180L
 MODULE_MIN_MATCHED_GENES <- 5L
 MODULE_MIN_MATCH_RATE <- 0.5
 
-# === 已运行的 WGCNA 模块输入 ===
 WGCNA_MEMBERSHIP_FILE <- '/data01/liuxy/Project/muscat_results_ck_ref_paper/CK_reference/Ensemble_PI_Heat_Cold_PEG/run_05_v1_4_annotated/Nature_network_modules.csv'
-WGCNA_GENE_COL   <- 'gene_name'  # Nature_network_modules.csv 的基因列
-WGCNA_MODULE_COL <- 'module'     # 含 Program01..Program12 与 grey；grey 会被过滤
-WGCNA_BACKGROUND_FILE <- ''      # 可选；未提供时 GO 背景用 detected whole-root genes
-MODULE_GO_FILE <- ''             # 可选已计算GO表：module,ID,Description,p.adjust,Count,GeneRatio。
-MARKER_FILE <- ''                # 可选真实验证marker表gene_id,cell_type,label；空时只画6个候选基因。
-HISTOLOGY_MANIFEST <- ''         # CSV列file,treatment,orientation,label；可选sample,scale_bar_um。
+WGCNA_GENE_COL   <- 'gene_name'  
+WGCNA_MODULE_COL <- 'module'     
+WGCNA_BACKGROUND_FILE <- ''      
+MODULE_GO_FILE <- ''             
+MARKER_FILE <- ''                
+HISTOLOGY_MANIFEST <- ''         
 RUN_MODULE_GO <- TRUE
 ORGDB_PACKAGE <- 'org.G.max.eg.db'
 GO_FDR <- 0.05
@@ -3563,10 +3352,10 @@ save_plot <- function(name,fun,w=12,h=8) {
 }
 canon_group <- function(x) {
   k<-toupper(trimws(as.character(x)));a<-c(CK='CK',CONTROL='CK',ABA='ABA',EBL='eBL',IAA='IAA',MEJA='MeJA',SA='SA')
-  unname(a[k]) # 不用模糊正则把Heat/Cold/PEG分配到激素组。
+  unname(a[k]) 
 }
 gene_key <- function(x) {
-  # 允许无版本或v4 Glyma及纯数字转录本后缀；其他版本不做隐式转换。
+  
   z<-sub('^(gene|transcript):','',trimws(x),ignore.case=TRUE)
   ok<-grepl('^Glyma[._-]?[0-9]{2}G[0-9]{6}([._-][0-9]+)*([._-]v4)?$',z,ignore.case=TRUE)
   z[ok]<-sub('^Glyma[._-]?([0-9]{2})G([0-9]{6}).*$','Glyma.\\1G\\2',z[ok],ignore.case=TRUE)
@@ -3619,7 +3408,7 @@ log_expression <- function(counts,sf,genes) {
   ans@x<-log1p(ans@x);ans
 }
 mean_by_sample <- function(values,d,keys=c('treatment','cell_type')) {
-  # 单个score，每个生物学重复先求均值；不把细胞当独立重复。
+  
   ii<-split(seq_len(nrow(d)),interaction(d[,c(keys,'sample'),drop=FALSE],drop=TRUE,lex.order=TRUE))
   rows<-lapply(ii,function(j){
     good<-j[is.finite(values[j])];if(!length(good))return(NULL)
@@ -3678,7 +3467,7 @@ load_or_build <- function() {
   ct<-methods::as(ct[,rownames(md),drop=FALSE],'dgCMatrix');rm(obj);gc()
   if(any(ct@x<0)|any(!is.finite(ct@x))|any(abs(ct@x-round(ct@x))>1e-6))stop('Expected raw nonnegative integer RNA counts.')
   if(anyDuplicated(rownames(ct)))stop('Duplicated gene IDs.')
-  # 保留所有gene以供候选基因绘图；检测阈值仅用于graph_test/GO背景。
+  
   keepcell<-Matrix::colSums(ct)>0;save_table(data.frame(cell=colnames(ct),retained=keepcell),'03_cell_filter')
   ct<-ct[,keepcell,drop=FALSE];md<-md[colnames(ct),,drop=FALSE];xy<-xy[colnames(ct),,drop=FALSE]
   cds<-monocle3::new_cell_data_set(ct,cell_metadata=md,
@@ -3721,7 +3510,7 @@ root_graph <- function(cds) {
     if(length(manual)>1)stop('Use one common root per component, not multiple competing roots.')
     if(length(manual)==1){root<-manual;reason<-'user_root_node'} else if(nrow(u)&&
                                                                          (length(ROOT_CELL_IDS)|| (nrow(u)>=MIN_QC_CELLS_PER_COMPONENT&&length(unique(u$sample))>=MIN_QC_SAMPLES_PER_COMPONENT))){
-      # 每个样本内节点QC比例，再跨样本平均：避免单个大样本主导选根。
+      
       tt<-table(factor(u$node,levels=nodes$node[nodes$component==cc]),u$sample)
       score<-rowMeans(sweep(tt,2,colSums(tt),'/'));root<-names(which.max(score));reason<-src
     }
@@ -3747,7 +3536,6 @@ root_graph <- function(cds) {
   list(cds=cds,d=d,nodes=nodes,edges=ed,graph=g,roots=roots,root_audit=audit)
 }
 
-# === 读取并接入已运行的 WGCNA 模块文件 ===
 load_modules <- function(features) {
   if(!nzchar(WGCNA_MEMBERSHIP_FILE)) {
     note('WGCNA_status','WGCNA membership not supplied: no module scores, module GO or module response claims are calculated. Fill WGCNA_MEMBERSHIP_FILE; screenshot labels alone are not gene sets.')
@@ -3806,8 +3594,7 @@ load_modules <- function(features) {
   list(sets=sets,membership=m)
 }
 module_scores <- function(counts,sf,sets) {
-  # 固定全体六处理参考，每个基因log1p(count/sizefactor)后做Z标准化，再取模块平均。
-  # 这是描述性module expression score，不是WGCNA eigengene、AUCell、调控活性或百分比激活。
+  
   ans<-matrix(NA_real_,ncol(counts),length(sets),dimnames=list(colnames(counts),names(sets)))
   audit<-list()
   for(m in names(sets)) {
@@ -3856,7 +3643,7 @@ module_GO <- function(sets,features,detected) {
   desc<-suppressMessages(AnnotationDbi::select(GO.db::GO.db,keys=names(terms),keytype='GOID',columns='TERM'))
   nameby<-setNames(desc$TERM,desc$GOID);out<-list();aud<-list()
   for(m in names(sets)) {
-    # universe输入先限制，再映射GID；独立保留映射去重。
+    
     ss<-mapping$feature_id[mapping$gene_id%in%sets[[m]]];ss<-intersect(na.omit(ss),bg);n<-length(ss);N<-length(bg)
     aud[[m]]<-data.frame(module=m,input_genes=length(sets[[m]]),BP_mapped_genes=n,BP_background=N,tested_terms=length(terms))
     if(n<2)next
@@ -3867,7 +3654,7 @@ module_GO <- function(sets,features,detected) {
   }
   save_table(do.call(rbind,aud),'25_GO_module_audit')
   if(!length(out)){note('GO_status','No modules with >=2 mapped BP genes.');return(NULL)}
-  z<-do.call(rbind,out);z$FDR<-p.adjust(z$pvalue,'BH') # 所有module x eligibleBP terms，包括零overlap。
+  z<-do.call(rbind,out);z$FDR<-p.adjust(z$pvalue,'BH') 
   z$source<-paste('Global BH over all tested module-term pairs;',source)
   save_table(z,'26_GO_all_tests');save_table(z[z$FDR<GO_FDR&z$Count>=2,],'27_GO_significant')
   note('GO_status',paste('Tested pairs:',nrow(z),'; significant with Count>=2:',sum(z$FDR<GO_FDR&z$Count>=2)))
@@ -3910,7 +3697,7 @@ get_paths <- function(r) {
   eligible<-head(eligible[order(-tab$n_cells[match(eligible,tab$path)])],MAX_PATHS)
   tab$plotted<-tab$path%in%eligible;save_table(tab,'32_all_root_to_leaf_paths')
   save_table(do.call(rbind,lapply(paths,function(p)data.frame(path=p$id,node=p$nodes))),'33_path_node_membership')
-  paths[eligible] # shared trunk cells legitimately occur in multiple paths; never sum path counts.
+  paths[eligible] 
 }
 bounded_density <- function(x,lim,bw,grid) {
   if(length(x)<2||diff(range(x))==0)return(rep(NA_real_,length(grid)))
@@ -3943,7 +3730,7 @@ draw_ridges <- function(d,rd,title='Six treatments | equal-weight replicate dens
   }
 }
 bin_replicates <- function(values,d,breaks) {
-  # values: features x cells，分箱所有处理同边界；无足够细胞的重复箱为NA，不补零。
+  
   stopifnot(ncol(values)==nrow(d));nb<-length(breaks)-1L
   bin<-cut(d$pseudotime,breaks=breaks,include.lowest=TRUE,labels=FALSE)
   samples<-unique(d$sample);a<-array(NA_real_,c(nrow(values),nb,length(samples)),dimnames=list(rownames(values),NULL,samples))
@@ -3959,7 +3746,7 @@ group_bins <- function(b) {
   a<-array(NA_real_,c(dim(b$value)[1],dim(b$value)[2],length(GROUPS)),dimnames=list(dimnames(b$value)[[1]],NULL,GROUPS))
   for(i in seq_along(GROUPS)) {
     j<-which(b$group==GROUPS[i]);if(!length(j))next
-    # Require BOTH biological replicates; missing coverage must remain visible.
+    
     if(length(j)==EXPECTED_REPLICATES)for(k in seq_len(dim(a)[2])){
       mm<-matrix(b$value[,k,j],nrow=dim(a)[1]);ok<-rowSums(is.finite(mm))==length(j)
       a[ok,k,i]<-rowMeans(mm[ok,,drop=FALSE])
@@ -4040,7 +3827,7 @@ draw_dot <- function(z) {
   mtext('Size: % detected; colour: gene-wise Z of replicate means',side=3,line=.2,cex=.52)
 }
 similarity_matrix <- function(counts,sf,d,detected) {
-  # 样本x类型先求log表达均值，再每类型等权样本均值；不是论文的单细胞PCA相关矩阵。
+  
   typ<-sort(unique(d$cell_type));features<-rownames(counts)[detected]
   parts<-split(seq_len(nrow(d)),interaction(d$cell_type,d$sample,drop=TRUE));parts<-parts[lengths(parts)>=MIN_SAMPLE_CELLS]
   if(!length(parts)){note('similarity_status','No cell type/sample has enough cells for similarity.');return(matrix(numeric(),0,0))}
@@ -4108,7 +3895,7 @@ draw_cross_section <- function(title='G | Root transverse schematic',tissue_valu
               col=cols[ty[i]],border='white',lwd=.6)
     }
   }
-  # 原生木质部/韧皮部位置仅为抽象符号，不宣称5日龄实测细胞数/极数/层数。
+  
   for(a in seq(0,2*pi,length.out=6)[-6])points(.28*cos(a),.28*sin(a),pch=21,bg='#DDCC77',cex=1.3)
   text(1.05,seq(.9,-.6,length.out=length(ty)),rev(ty),adj=0,cex=.5)
   text(0,-1.15,'Anatomical schematic; not histology or measured cell layers',cex=.52)
@@ -4158,7 +3945,7 @@ histology_panels <- function() {
     slot<-if(orientation%in%c('transverse','cross','横切'))'cross' else if(orientation%in%c('longitudinal','纵切'))'long' else ''
     if(nzchar(slot)&&!slot%in%assigned){panels[[slot]]<-fn;assigned<-c(assigned,slot)}
   }
-  panels # 主版图使用manifest中每方向第一张；每张真实图片另存，缺方向才用示意图。
+  panels 
 }
 
 smooth_bins <- function(x,y) {
@@ -4166,7 +3953,7 @@ smooth_bins <- function(x,y) {
   runs<-split(ii,cumsum(c(TRUE,diff(ii)!=1)))
   for(j in runs)if(length(j)>=4&&length(unique(x[j]))>=4)
     out[j]<-predict(smooth.spline(x[j],y[j],df=min(4,length(j)-1)),x[j])$y
-  out # 不跨缺失区，不向端点外推；用于作图，未生成额外显著性。
+  out 
 }
 array_long <- function(a,centers) {
   ind<-expand.grid(feature=dimnames(a)[[1]],bin=seq_len(dim(a)[2]),treatment=dimnames(a)[[3]],stringsAsFactors=FALSE)
@@ -4213,7 +4000,7 @@ path_analysis <- function(p,r,counts,sf,scores,dynamic) {
   b<-bin_replicates(ex,dd,br);a<-group_bins(b);rm(ex)
   save_table(array_long(a,b$centers),paste0('D_',p$id,'_dynamic_expression_raw_bins'))
   for(i in seq_len(dim(a)[1]))for(gr in GROUPS)a[i,,gr]<-smooth_bins(b$centers,a[i,,gr])
-  # 每个基因在所有有效处理x箱上共用Z标准化；各处理不能分别归一化后声称幅度可比。
+  
   z<-a
   for(i in seq_len(dim(a)[1])){
     v<-as.vector(a[i,,]);s<-sd(v,na.rm=TRUE);mu<-mean(v,na.rm=TRUE)
@@ -4241,7 +4028,7 @@ plot_graph_summary <- function(r,scores,go) {
     cc<-r$nodes$component[match(rt,r$nodes$node)];ns<-r$nodes$node[r$nodes$component==cc]
     sub<-igraph::induced_subgraph(r$graph,ns);v<-igraph::V(sub)$name
     layout<-igraph::layout_as_tree(sub,root=match(rt,v),mode='all',flip.y=TRUE)
-    # 节点dominant标签只描述附近观测细胞；不能作为谱系追踪结论。
+    
     types<-vapply(v,function(n){ii<-which(r$d$node==n);if(!length(ii))return('');names(which.max(table(r$d$cell_type[ii])))},character(1))
     show<-igraph::degree(sub)!=2|v==rt
     lab<-ifelse(show,paste(v,types,sep='\n'),'')
@@ -4265,7 +4052,7 @@ main_v8 <- function() {
   if(length(sf)!=ncol(counts)||any(!is.finite(sf)|sf<=0))stop('Invalid saved size factors.')
   detected<-Matrix::rowSums(counts>0)>=MIN_GENE_CELLS;tycols<-type_palette(sort(unique(d$cell_type)))
   save_table(as.data.frame(table(treatment=d$treatment,sample=d$sample,cell_type=d$cell_type)),'10_cells_per_sample_type')
-  # 样本内捕获细胞比例，不能等同组织绝对数量/增殖率。
+  
   comp<-as.data.frame(table(sample=d$sample,cell_type=d$cell_type));names(comp)[3]<-'n'
   totals<-table(d$sample);comp$proportion<-comp$n/as.numeric(totals[as.character(comp$sample)])
   comp$treatment<-d$treatment[match(comp$sample,d$sample)];save_table(comp,'11_captured_cell_proportions')
@@ -4297,7 +4084,7 @@ main_v8 <- function() {
     }}),14,9)
     save_plot(paste0('F_',safe_name(m),'_response_vs_CK'),local({mm<-m;function()draw_response(response,mm)}),9,8)
   }
-  # 六候选基因UMAP，始终使用同一原UMAP；每个基因跨处理固定表达色标。
+  
   mp<-map_genes(TARGET_GENES,rownames(counts));save_table(mp,'49_sixgene_mapping')
   for(i in seq_len(nrow(mp))) {
     if(is.na(mp$feature_id[i]))next
@@ -4308,7 +4095,7 @@ main_v8 <- function() {
     }}),14,9)
   }
   anatomy<-histology_panels();plot_graph_summary(r,scores,go)
-  # 主版图先输出；耗时graph_test/DE不阻塞基础atlas和模块图。
+  
   primary<-if(length(rooted))rooted[which.max(vapply(rooted,function(cc)sum(d$component==cc),numeric(1)))] else NA_integer_
   dd<-d[!is.na(primary)&d$component==primary&is.finite(d$pseudotime),,drop=FALSE]
   rd<-if(nrow(dd))ridge_data(dd) else NULL
@@ -4327,7 +4114,7 @@ main_v8 <- function() {
   dynamic<-graph_candidates(cds,z$signature);paths<-get_paths(r)
   for(p in paths){report('Processing',p$id,'cells:',length(p$ix));path_analysis(p,r,counts,sf,scores,dynamic)}
   files<-file.path(OUT_DIR,paste0('D_',names(paths),'_module_peak_and_response.csv'))
-  files<-files[file.exists(files)] # 只整合当前运行选中的paths，避免读取历史遗留的其他路径。
+  files<-files[file.exists(files)] 
   if(ncol(scores)&&length(files)){
     ss<-do.call(rbind,lapply(files,read.csv,stringsAsFactors=FALSE))
     ss$descriptive_peak_window<-as.character(cut(ss$peak_relative_position,c(0,1/3,2/3,1),
@@ -4355,4 +4142,3 @@ main_v8 <- function() {
 }
 
 if(sys.nframe()==0L) main_v8()
-# 在RStudio中可 source(..., encoding='UTF-8') 后运行 main_v8()

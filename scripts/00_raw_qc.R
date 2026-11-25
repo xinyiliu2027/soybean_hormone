@@ -1,5 +1,3 @@
-# Raw 10X QC entry point. Thresholds must come from reviewed sample QC plots.
-# Run from repository root after filling config/samples.csv.
 required <- c("Seurat", "Matrix")
 for (pkg in required) if (!requireNamespace(pkg, quietly=TRUE)) stop("Missing R package: ",pkg)
 manifest <- "config/samples.csv"
@@ -31,5 +29,3 @@ for(i in seq_len(nrow(samples))) {
  audit[[i]] <- data.frame(sample_id=s$sample_id,treatment=s$treatment,input=ncol(object),retained=sum(keep))
 }
 write.csv(do.call(rbind,audit),"results/qc/sample_qc_summary.csv",row.names=FALSE)
-# Organelle fractions and DoubletFinder require the correct soybean feature lists
-# and reviewed sample-specific parameters; no mitochondrial gene prefix is assumed.
