@@ -1,0 +1,20 @@
+{
+  "groups": {
+    "CK": 27042,
+    "ABA": 16755,
+    "eBL": 22824,
+    "IAA": 28273,
+    "MEJA": 19681,
+    "SA": 12236
+  },
+  "genes": [
+    "Glyma.05G103600",
+    "Glyma.15G040200",
+    "Glyma.12G234200",
+    "Glyma.08G163500",
+    "Glyma.10G022500"
+  ],
+  "source": "seurat_obj_with_CK2_v3.rds",
+  "downstream_results": "not imported",
+  "all_gene_hormone_summaries": "not exported"
+}
